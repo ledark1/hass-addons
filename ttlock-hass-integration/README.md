@@ -103,7 +103,7 @@ gateway_pass: ""        # Gateway password
 
 If your Home Assistant server doesn't have Bluetooth, or if your locks are out of range, you can use an **ESP32 as a remote BLE gateway**.
 
-👉 **[domodom30/esp32-ble-gateway](https://github.com/domodom30/esp32-ble-gateway)**
+👉 **[esp32-ble-gateway](https://github.com/domodom30/esp32-ble-gateway)**
 
 This gateway bridges WiFi and BLE using the Noble WebSocket protocol — fully compatible with this add-on.
 
