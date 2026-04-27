@@ -609,44 +609,49 @@ class Manager extends EventEmitter {
     }
   }
 
-  async getOperationLog(address, reload = false) {
+  async getOperationLog(address, reload) {
     const lock = this.pairedLocks.get(address);
-    if (lock === undefined) return false;
-    if (!(await this._connectLock(lock))) return false;
-    try {
-      // When reload is requested, force newEvents=true so the SDK always fetches
-      // new events from the lock (sequence 0xffff) before returning the merged log.
-      // Without this, if the monitor hasn't seen the lock since startup,
-      // newEvents stays false and only the cached (old) operationLog is returned.
-      if (reload) {
-        lock.newEvents = true;
+    if (reload == undefined) {
+      reload = false;
+    }
+    if (lock != undefined) {
+      if (!(await this._connectLock(lock))) {
+        return false;
       }
-      let operations = JSON.parse(JSON.stringify(await lock.getOperationLog(true, false)));
-      return operations.filter(Boolean).map((operation) => {
-        operation.recordTypeName = LogOperateNames[operation.recordType];
-        if (LogOperateCategory.LOCK.includes(operation.recordType)) {
-          operation.recordTypeCategory = 'LOCK';
-        } else if (LogOperateCategory.UNLOCK.includes(operation.recordType)) {
-          operation.recordTypeCategory = 'UNLOCK';
-        } else if (LogOperateCategory.FAILED.includes(operation.recordType)) {
-          operation.recordTypeCategory = 'FAILED';
-        } else {
-          operation.recordTypeCategory = 'OTHER';
-        }
-        if (operation.password !== undefined) {
-          if (LogOperateCategory.IC.includes(operation.recordType)) {
-            operation.passwordName = store.getCardAlias(operation.password);
-          } else if (LogOperateCategory.FR.includes(operation.recordType)) {
-            operation.passwordName = store.getFingerAlias(operation.password);
+      try {
+        let operations = JSON.parse(JSON.stringify(await lock.getOperationLog(true, reload)));
+        let validOperations = [];
+        for (let operation of operations) {
+          if (operation) {
+            operation.recordTypeName = LogOperateNames[operation.recordType];
+            if (LogOperateCategory.LOCK.includes(operation.recordType)) {
+              operation.recordTypeCategory = 'LOCK';
+            } else if (LogOperateCategory.UNLOCK.includes(operation.recordType)) {
+              operation.recordTypeCategory = 'UNLOCK';
+            } else if (LogOperateCategory.FAILED.includes(operation.recordType)) {
+              operation.recordTypeCategory = 'FAILED';
+            } else {
+              operation.recordTypeCategory = 'OTHER';
+            }
+            if (typeof operation.password != 'undefined') {
+              if (LogOperateCategory.IC.includes(operation.recordType)) {
+                operation.passwordName = store.getCardAlias(operation.password);
+              } else if (LogOperateCategory.FR.includes(operation.recordType)) {
+                operation.passwordName = store.getFingerAlias(operation.password);
+              }
+            }
+            validOperations.push(operation);
           }
         }
-        return operation;
-      });
-    } catch (error) {
-      console.error(error);
+        return validOperations;
+      } catch (error) {
+        console.error(error);
+        return false;
+      } finally {
+        this._releaseConnect(address);
+      }
+    } else {
       return false;
-    } finally {
-      this._releaseConnect(address);
     }
   }
 
