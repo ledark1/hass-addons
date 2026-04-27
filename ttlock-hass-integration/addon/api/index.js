@@ -29,6 +29,7 @@ module.exports = async (server) => {
   manager.on('lockUpdated', sendLockStatusUpdate);
   manager.on('scanStart', sendStatusUpdate);
   manager.on('scanStop', sendStatusUpdate);
+  manager.on('adapterReady', sendStatusUpdate);
 
   wss.on('connection', (ws) => {
     const api = new WsApi(ws);

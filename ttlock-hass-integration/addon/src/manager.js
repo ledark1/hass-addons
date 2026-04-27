@@ -89,6 +89,12 @@ class Manager extends EventEmitter {
         this.updateClientLockDataFromStore();
 
         this.client.on('ready', () => {
+          // Update startupStatus in case prepareBTService() timed out before BLE was ready
+          if (this.startupStatus !== 0) {
+            console.log('BLE adapter ready (delayed)');
+            this.startupStatus = 0;
+            this.emit('adapterReady');
+          }
           this.client.startMonitor();
         });
         this.client.on('foundLock', this._onFoundLock.bind(this));
@@ -98,6 +104,9 @@ class Manager extends EventEmitter {
         this.client.on('monitorStop', () => console.log('Monitor stopped'));
         this.client.on('updatedLockData', this._onUpdatedLockData.bind(this));
         const adapterReady = await this.client.prepareBTService();
+        if (!adapterReady) {
+          console.warn('BLE adapter not ready within timeout — waiting for delayed ready event');
+        }
         this.startupStatus = adapterReady ? 0 : 1;
       } catch (error) {
         console.log(error);
@@ -856,8 +865,9 @@ class Manager extends EventEmitter {
       this.pairedLocks.set(lock.getAddress(), lock);
       console.log('Connected to paired lock ' + lock.getAddress());
       // One-time migration: persist deviceInfo if not yet stored (locks paired before v1.4.0)
-      // Done here because the lock is guaranteed to still be connected after onConnected() ran.
-      if (!store.getDeviceInfo(lock.getAddress())) {
+      // Only run during initial monitor connects — NOT during user operations (would cause
+      // concurrent BLE reads since emit() is synchronous but _onLockConnected is async)
+      if (!this.waitingForConnect.has(lock.getAddress()) && !store.getDeviceInfo(lock.getAddress())) {
         try {
           const deviceInfo = await lock.macro_readAllDeviceInfo();
           if (deviceInfo) {
