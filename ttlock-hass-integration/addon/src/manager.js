@@ -969,6 +969,13 @@ class Manager extends EventEmitter {
 
     // if lock has new operations read the operations and send updates
     if (paramsChanged.newEvents == true && lock.hasNewEvents()) {
+      // Cooldown: skip if we already processed the log recently (BLE advertisement keeps newEvents=true
+      // even after a successful fetch, which would cause an infinite reconnect loop).
+      const OPLOG_COOLDOWN_MS = 60 * 1000;
+      if (lock._lastOperationLogFetch && Date.now() - lock._lastOperationLogFetch < OPLOG_COOLDOWN_MS) {
+        lock.newEvents = false;
+        return;
+      }
       if (!lock.isConnected() && !lock._processingOperationLog && !this.waitingForConnect.has(lock.getAddress())) {
         const result = await lock.connect(true); // skipDataRead=true
         if (!result) {
@@ -1027,6 +1034,7 @@ class Manager extends EventEmitter {
     try {
       let operations = await lock.getOperationLog();
       lock.newEvents = false;
+      lock._lastOperationLogFetch = Date.now();
       if (!Array.isArray(operations)) return;
       let lastStatus = LockedStatus.UNKNOWN;
       for (let op of operations) {
