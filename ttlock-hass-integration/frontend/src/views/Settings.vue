@@ -24,7 +24,7 @@
 
     <!-- Paramètres -->
     <v-card class="mb-4" rounded="lg" elevation="1">
-      <div class="bg-blue-grey-darken-2 pa-3 d-flex align-center rounded-t-lg">
+      <div class="bg-primary pa-3 d-flex align-center rounded-t-lg">
         <v-icon icon="mdi-tune" color="white" class="mr-2" size="20" />
         <span class="text-white text-body-2 font-weight-medium">{{ $t('settings.title') }}</span>
       </div>
@@ -62,10 +62,10 @@
         </v-row>
       </v-card-text>
       <v-card-actions class="px-4 pb-4">
-        <v-btn variant="text" color="error" prepend-icon="mdi-close" @click="cancel">{{ $t('common.cancel') }}</v-btn>
+        <v-btn variant="elevated" color="error" size="small" prepend-icon="mdi-close" @click="cancel">{{ $t('common.cancel') }}</v-btn>
         <v-spacer />
         <v-btn
-          color="primary"
+          color="success"
           variant="elevated"
           prepend-icon="mdi-content-save"
           :disabled="!changesMade"
@@ -77,7 +77,7 @@
 
     <!-- Informations appareil -->
     <v-card class="mb-4" rounded="lg" elevation="1" v-if="lock.manufacturer || lock.model || lock.firmware">
-      <div class="bg-teal-darken-2 pa-3 d-flex align-center rounded-t-lg">
+      <div class="bg-warning pa-3 d-flex align-center rounded-t-lg">
         <v-icon icon="mdi-information-outline" color="white" class="mr-2" size="20" />
         <span class="text-white text-body-2 font-weight-medium">{{ $t('settings.deviceInfo') }}</span>
       </div>
@@ -103,7 +103,7 @@
 
     <!-- Synchroniser l'horloge -->
     <v-card class="mb-4" rounded="lg" elevation="1">
-      <div class="bg-indigo-darken-2 pa-3 d-flex align-center rounded-t-lg">
+      <div class="bg-primary pa-3 d-flex align-center rounded-t-lg">
         <v-icon icon="mdi-clock-outline" color="white" class="mr-2" size="20" />
         <span class="text-white text-body-2 font-weight-medium">{{ $t('settings.syncClock') }}</span>
       </div>
@@ -111,8 +111,9 @@
         <div class="d-flex align-center justify-space-between flex-wrap gap-2">
           <div class="text-caption text-medium-emphasis">{{ $t('settings.syncClockHint') }}</div>
           <v-btn
-            color="indigo"
+            color="success"
             variant="tonal"
+            size="small"
             prepend-icon="mdi-clock-sync-outline"
             :loading="waitingCalibrate"
             @click="calibrateTime"
@@ -123,14 +124,14 @@
 
     <!-- Zone dangereuse -->
     <v-card rounded="lg" elevation="1" border="error sm">
-      <div class="bg-red-darken-3 pa-3 d-flex align-center rounded-t-lg">
+      <div class="bg-danger pa-3 d-flex align-center rounded-t-lg">
         <v-icon icon="mdi-alert-circle-outline" color="white" class="mr-2" size="20" />
         <span class="text-white text-body-2 font-weight-medium">{{ $t('settings.dangerZone') }}</span>
       </div>
       <v-card-text>
         <div class="d-flex align-center justify-space-between flex-wrap gap-2">
           <div class="text-caption text-medium-emphasis mr-4">{{ $t('settings.unpairWarning') }}</div>
-          <v-btn color="error" variant="elevated" prepend-icon="mdi-link-off" @click="unpair">
+          <v-btn color="error" variant="elevated" size="small" prepend-icon="mdi-link-off" @click="unpair">
             {{ $t('settings.unpair') }}
           </v-btn>
         </div>
