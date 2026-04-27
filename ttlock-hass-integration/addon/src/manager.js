@@ -618,7 +618,13 @@ class Manager extends EventEmitter {
       return false;
     }
     try {
-      let operations = structuredClone(await lock.getOperationLog(true, reload));
+      // Force the SDK's 0xffff fetch path (new events) so a manual refresh always pulls
+      // fresh entries. Keep noCache=false so the cache is merged — passing noCache=true
+      // makes the SDK re-fetch from sequence 0 (dozens of BLE round-trips, unreliable).
+      if (reload) {
+        lock.newEvents = true;
+      }
+      let operations = structuredClone(await lock.getOperationLog(true, false));
       let validOperations = [];
       for (let operation of operations) {
         if (operation) {
@@ -705,11 +711,21 @@ class Manager extends EventEmitter {
           console.log('Connected to', address);
           return true;
         }
+        // The TTLock self-disconnects mid-handshake under load. After the SDK returns false
+        // the BLE stack may still be cleaning up — make sure it's idle before retrying.
+        if (lock.connecting) {
+          let wait = 30; // up to 3s
+          while (lock.connecting && wait > 0) {
+            await sleep(100);
+            wait--;
+          }
+        }
         console.log(`Connect attempt ${attempt}/3 failed (returned false)`);
       } catch (error) {
         console.error(`Connect attempt ${attempt}/3 error:`, error.message);
       }
-      if (attempt < 3) await sleep(2000);
+      // 5s lets the lock re-advertise so the next connect lands on a fresh session.
+      if (attempt < 3) await sleep(5000);
     }
     console.log('All connect attempts failed for', address);
     this.waitingForConnect.delete(address);
