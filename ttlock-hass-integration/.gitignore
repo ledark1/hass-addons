@@ -3,3 +3,4 @@ aliasData.json
 dev.sh
 claude/*.*
 .claude/
+.github/copilot-instructions.md
