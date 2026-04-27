@@ -99,6 +99,42 @@ gateway_pass: ""        # Gateway password
 
 ---
 
+## 📡 ESP32 BLE Gateway
+
+If your Home Assistant server doesn't have Bluetooth, or if your locks are out of range, you can use an **ESP32 as a remote BLE gateway**.
+
+👉 **[domodom30/esp32-ble-gateway](https://github.com/domodom30/esp32-ble-gateway)**
+
+This gateway bridges WiFi and BLE using the Noble WebSocket protocol — fully compatible with this add-on.
+
+### Gateway features
+
+| Feature | Details |
+|---|---|
+| 🔧 **Stack** | NimBLE-Arduino 2.x + Vue 3 / Vite WebUI |
+| 🌐 **Network** | DHCP or static IP, mDNS (`<name>.local`) |
+| 🔑 **Auth** | AES-128-CBC key + configurable admin login/password |
+| 🔒 **TLS** | HTTPS web interface (self-signed certificate) |
+| 📦 **Hardware** | ESP32-WROVER board |
+
+### Quick setup
+
+1. Flash the filesystem then the firmware via PlatformIO
+2. Connect to the `ESP32GW` WiFi AP (password: `87654321`)
+3. Open `https://esp32gw.local`, configure your WiFi, AES key and admin credentials
+4. Set the add-on configuration:
+
+```yaml
+gateway: "noble"
+gateway_host: "IP_OR_HOSTNAME_OF_ESP32"
+gateway_port: 8080
+gateway_key: "AES_KEY_FROM_ESP_CONFIG"
+gateway_user: "YOUR_ADMIN_LOGIN"
+gateway_pass: "YOUR_ADMIN_PASSWORD"
+```
+
+---
+
 ## 🔗 Useful Links
 
 - 📝 [Changelog](CHANGELOG.md)
