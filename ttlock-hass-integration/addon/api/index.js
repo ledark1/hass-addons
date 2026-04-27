@@ -272,7 +272,8 @@ module.exports = async (server) => {
 
           case 'operations':
             if (msg.data && msg.data.address) {
-              const operations = await manager.getOperationLog(msg.data.address);
+              // reload=true: force fetching new events from the lock (bypass SDK cache)
+              const operations = await manager.getOperationLog(msg.data.address, true);
               if (operations === false) {
                 api.sendError('Failed getting operation log', msg);
               } else {

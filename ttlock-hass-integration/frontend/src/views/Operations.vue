@@ -7,6 +7,15 @@
         </template>
         <v-card-title>{{ lock.name }}</v-card-title>
         <v-card-subtitle class="text-caption font-mono">{{ lock.address }}</v-card-subtitle>
+        <template #append>
+          <v-btn
+            icon="mdi-refresh"
+            variant="text"
+            color="white"
+            :loading="waitingOperations"
+            @click="refresh"
+          />
+        </template>
       </v-card-item>
     </v-card>
 
@@ -101,6 +110,9 @@ export default {
   methods: {
     dateTime(str) {
       return moment(str, "YYYYMMDDHHmmss").format("DD-MM-YYYY HH:mm:ss")
+    },
+    refresh() {
+      this.$store.dispatch("readOperations", this.lock.address)
     },
     batteryIcon(b) {
       if (b > 90) return 'mdi-battery-bluetooth'

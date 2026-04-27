@@ -605,7 +605,14 @@ class Manager extends EventEmitter {
     if (lock === undefined) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
-      let operations = JSON.parse(JSON.stringify(await lock.getOperationLog(true, reload)));
+      // When reload is requested, force newEvents=true so the SDK always fetches
+      // new events from the lock (sequence 0xffff) before returning the merged log.
+      // Without this, if the monitor hasn't seen the lock since startup,
+      // newEvents stays false and only the cached (old) operationLog is returned.
+      if (reload) {
+        lock.newEvents = true;
+      }
+      let operations = JSON.parse(JSON.stringify(await lock.getOperationLog(true, false)));
       return operations.filter(Boolean).map((operation) => {
         operation.recordTypeName = LogOperateNames[operation.recordType];
         if (LogOperateCategory.LOCK.includes(operation.recordType)) {
