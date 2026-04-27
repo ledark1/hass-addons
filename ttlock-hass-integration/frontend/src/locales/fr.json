@@ -1,0 +1,117 @@
+{
+  "app": {
+    "title": "TTLock",
+    "editConfig": "Modifier le fichier de configuration",
+    "startScan": "Démarrer le scan BLE",
+    "refreshCredentials": "Actualiser les identifiants",
+    "status": {
+      "ok": "Démarrage terminé, tout est bon",
+      "error": "Démarrage terminé, erreurs au démarrage",
+      "starting": "Démarrage en cours ..."
+    }
+  },
+  "lock": {
+    "lock": "Verrouiller",
+    "unlock": "Déverrouiller",
+    "pair": "Appairer",
+    "credentials": "Identifiants",
+    "settings": "Paramètres",
+    "operationLog": "Journal d'opérations",
+    "locked": "Verrouillé",
+    "unlocked": "Déverrouillé",
+    "connected": "Connecté",
+    "disconnected": "Déconnecté",
+    "unknown": "État inconnu",
+    "autoLockTime": "Verrouillage auto",
+    "autoLockOff": "Désactivé",
+    "sound": "Son",
+    "soundOn": "activé",
+    "soundOff": "désactivé"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "autoLockHint": "Valeur actuelle : {value} secondes (0 pour désactiver)",
+    "autoLockTime": "Temps de verrouillage automatique après l'ouverture",
+    "autoLockNotSupported": "La serrure ne supporte pas le verrouillage automatique",
+    "soundHint": "Active ou désactive le bip lors de la saisie ou du déverrouillage",
+    "deviceInfo": "Informations appareil",
+    "manufacturer": "Fabricant",
+    "model": "Modèle",
+    "firmware": "Firmware",
+    "syncClock": "Synchroniser l'horloge",
+    "syncClockHint": "Synchronise l'horloge de la serrure avec l'heure système",
+    "unpairWarning": "Le désappairage supprimera tous les identifiants enregistrés et réinitialisera la serrure.",
+    "unpair": "Désappairer",
+    "confirmUnpair": "Êtes-vous sûr de vouloir désappairer cette serrure ?",
+    "dangerZone": "Zone dangereuse"
+  },
+  "credentials": {
+    "pins": "Code PIN clavier",
+    "addPin": "Ajouter un PIN",
+    "cards": "Cartes IC",
+    "addCard": "Ajouter une carte",
+    "fingers": "Empreintes digitales",
+    "addFinger": "Ajouter une empreinte",
+    "loading": "Chargement...",
+    "type": "Type",
+    "pinCode": "Code PIN",
+    "cardSn": "N° de série carte",
+    "fingerprintId": "ID empreinte",
+    "validFrom": "Valide du",
+    "validTo": "Valide au",
+    "changePin": "Modifier le PIN",
+    "deletePin": "Supprimer le PIN",
+    "editCard": "Modifier la carte",
+    "deleteCard": "Supprimer la carte",
+    "editFinger": "Modifier l'empreinte",
+    "deleteFinger": "Supprimer l'empreinte",
+    "confirmDeletePin": "Êtes-vous sûr de vouloir supprimer ce PIN ?",
+    "confirmDeleteCard": "Êtes-vous sûr de vouloir supprimer cette carte ?",
+    "confirmDeleteFinger": "Êtes-vous sûr de vouloir supprimer cette empreinte ?"
+  },
+  "passcode": {
+    "title": "Code PIN",
+    "hint": "4 à 9 chiffres",
+    "type": "Type de code",
+    "newCode": "Nouveau code PIN",
+    "permanent": "Permanent",
+    "count": "Limité",
+    "timed": "Temporisé",
+    "cyclic": "Cyclique"
+  },
+  "card": {
+    "title": "Carte",
+    "aliasHint": "Un nom pour identifier cette carte",
+    "alias": "Alias",
+    "validFrom": "Valide du",
+    "validTo": "Valide au",
+    "time": "Heure",
+    "scanPrompt": "Veuillez scanner votre carte"
+  },
+  "finger": {
+    "title": "Empreinte digitale",
+    "aliasHint": "Un nom pour identifier ce doigt",
+    "alias": "Alias",
+    "validFrom": "Valide du",
+    "validTo": "Valide au",
+    "time": "Heure",
+    "scanPrompt": "Veuillez scanner votre doigt"
+  },
+  "operations": {
+    "index": "#",
+    "date": "Date",
+    "battery": "Batterie",
+    "credential": "Identifiant",
+    "description": "Description"
+  },
+  "common": {
+    "actions": "Actions",
+    "add": "Ajouter",
+    "edit": "Modifier",
+    "confirm": "Confirmer",
+    "cancel": "Annuler",
+    "ok": "OK",
+    "close": "Fermer",
+    "save": "Enregistrer"
+  }
+}

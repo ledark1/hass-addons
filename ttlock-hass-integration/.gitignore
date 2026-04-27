@@ -1,0 +1,5 @@
+lockData.json
+aliasData.json
+dev.sh
+claude/*.*
+.claude/

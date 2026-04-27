@@ -1,0 +1,117 @@
+{
+  "app": {
+    "title": "TTLock integration",
+    "editConfig": "Edit locks configuration file",
+    "startScan": "Start BLE scan",
+    "refreshCredentials": "Refresh credentials",
+    "status": {
+      "ok": "Startup completed, all good",
+      "error": "Startup completed, errors during startup",
+      "starting": "Starting ..."
+    }
+  },
+  "lock": {
+    "lock": "Lock",
+    "unlock": "Unlock",
+    "pair": "Pair",
+    "credentials": "Credentials",
+    "settings": "Settings",
+    "operationLog": "Operation log",
+    "locked": "Locked",
+    "unlocked": "Unlocked",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "unknown": "Unknown state",
+    "autoLockTime": "Auto lock time",
+    "autoLockOff": "Disabled",
+    "sound": "Sound",
+    "soundOn": "on",
+    "soundOff": "off"
+  },
+  "settings": {
+    "title": "Settings",
+    "autoLockHint": "Current value: {value} seconds (set to 0 to disable)",
+    "autoLockTime": "Auto lock time after unlocking",
+    "autoLockNotSupported": "Lock does not support auto lock",
+    "soundHint": "Enables or disables the beep when pressing keys or unlocking",
+    "deviceInfo": "Device information",
+    "manufacturer": "Manufacturer",
+    "model": "Model",
+    "firmware": "Firmware",
+    "syncClock": "Sync clock",
+    "syncClockHint": "Synchronize the lock's clock with system time",
+    "unpairWarning": "Unpairing will remove all credentials stored and will reset the lock to defaults.",
+    "unpair": "Unpair",
+    "confirmUnpair": "Are you sure you want to unpair this lock ?",
+    "dangerZone": "Danger zone"
+  },
+  "credentials": {
+    "pins": "Keyboard PIN",
+    "addPin": "Add PIN",
+    "cards": "IC Cards",
+    "addCard": "Add Card",
+    "fingers": "Fingerprints",
+    "addFinger": "Add Fingerprint",
+    "loading": "Loading...",
+    "type": "Type",
+    "pinCode": "PIN Code",
+    "cardSn": "Card S/N",
+    "fingerprintId": "Fingerprint ID",
+    "validFrom": "Valid from",
+    "validTo": "Valid to",
+    "changePin": "Change PIN",
+    "deletePin": "Delete PIN",
+    "editCard": "Edit Card",
+    "deleteCard": "Delete Card",
+    "editFinger": "Edit Finger",
+    "deleteFinger": "Delete Finger",
+    "confirmDeletePin": "Are you sure you want to delete this PIN ?",
+    "confirmDeleteCard": "Are you sure you want to delete this Card ?",
+    "confirmDeleteFinger": "Are you sure you want to delete this Fingerprint ?"
+  },
+  "passcode": {
+    "title": "PIN Code",
+    "hint": "4 to 9 digits",
+    "type": "Code type",
+    "newCode": "New PIN code",
+    "permanent": "Permanent",
+    "count": "Count",
+    "timed": "Timed",
+    "cyclic": "Cyclic"
+  },
+  "card": {
+    "title": "Card",
+    "aliasHint": "A name so you can identify this card",
+    "alias": "Alias",
+    "validFrom": "Valid from",
+    "validTo": "Valid to",
+    "time": "Time",
+    "scanPrompt": "Please scan your card"
+  },
+  "finger": {
+    "title": "Fingerprint",
+    "aliasHint": "A name so you can identify this finger",
+    "alias": "Alias",
+    "validFrom": "Valid from",
+    "validTo": "Valid to",
+    "time": "Time",
+    "scanPrompt": "Please scan your finger"
+  },
+  "operations": {
+    "index": "#",
+    "date": "Date",
+    "battery": "Battery",
+    "credential": "Credential",
+    "description": "Description"
+  },
+  "common": {
+    "actions": "Actions",
+    "add": "Add",
+    "edit": "Edit",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "ok": "OK",
+    "close": "Close",
+    "save": "Save"
+  }
+}
