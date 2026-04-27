@@ -67,6 +67,7 @@
         <v-btn
           color="success"
           variant="elevated"
+          size="small"
           prepend-icon="mdi-content-save"
           :disabled="!changesMade"
           :loading="waitingSettings"
@@ -124,7 +125,7 @@
 
     <!-- Zone dangereuse -->
     <v-card rounded="lg" elevation="1" border="error sm">
-      <div class="bg-danger pa-3 d-flex align-center rounded-t-lg">
+      <div class="bg-error pa-3 d-flex align-center rounded-t-lg">
         <v-icon icon="mdi-alert-circle-outline" color="white" class="mr-2" size="20" />
         <span class="text-white text-body-2 font-weight-medium">{{ $t('settings.dangerZone') }}</span>
       </div>

@@ -68,7 +68,11 @@ class Lock {
     }
     // getLockSound uses in-memory cache (no BLE) — safe to call even when connected
     try {
-      lock.audio = (await lockObject.getLockSound()) == AudioManage.TURN_ON ? true : false;
+      const sound = await lockObject.getLockSound();
+      if (sound !== AudioManage.UNKNOWN) {
+        lock.audio = sound === AudioManage.TURN_ON;
+      }
+      // If UNKNOWN, leave lock.audio as undefined — chip won't show in UI
     } catch (error) {
       // not yet available (cache empty and not connected)
     }

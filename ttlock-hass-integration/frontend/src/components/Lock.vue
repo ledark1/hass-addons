@@ -69,9 +69,9 @@
           {{ lock.autoLockTime > 0 ? lock.autoLockTime + 's' : $t('lock.autoLockOff') }}
         </v-chip>
         <v-chip
-          v-if="lock.hasAudio"
+          v-if="lock.hasAudio && lock.audio !== undefined"
           size="small" variant="outlined"
-          :color="lock.audio ? undefined : 'grey'"
+          :color="lock.audio ? 'success' : 'grey'"
           :prepend-icon="lock.audio ? 'mdi-volume-high' : 'mdi-volume-off'"
         >
           {{ lock.audio ? $t('lock.soundOn') : $t('lock.soundOff') }}
