@@ -3,23 +3,52 @@
 
     <!-- Header -->
     <v-card class="mb-4" rounded="lg" elevation="2">
-      <v-card-item class="bg-primary pa-4">
-        <template #prepend>
-          <v-avatar color="white" size="44">
-            <v-icon icon="mdi-cog" color="primary" size="26" />
-          </v-avatar>
-        </template>
-        <v-card-title class="text-white text-h6">{{ lock.name }}</v-card-title>
-        <v-card-subtitle class="text-blue-lighten-3 text-caption font-mono">{{ lock.address }}</v-card-subtitle>
-        <template #append>
+      <div class="bg-primary">
+        <v-card-item class="pa-4">
+          <template #prepend>
+            <v-avatar color="white" size="44">
+              <v-icon icon="mdi-cog" color="primary" size="26" />
+            </v-avatar>
+          </template>
+          <v-card-title class="text-white text-h6">{{ lock.name }}</v-card-title>
+          <v-card-subtitle class="text-blue-lighten-3 text-caption font-mono">{{ lock.address }}</v-card-subtitle>
+          <template #append>
+            <v-chip
+              :color="lock.connected ? 'success' : 'grey'"
+              size="small"
+              variant="flat"
+              :prepend-icon="lock.connected ? 'mdi-bluetooth-connect' : 'mdi-bluetooth-off'"
+            >{{ lock.connected ? $t('lock.connected') : $t('lock.disconnected') }}</v-chip>
+          </template>
+        </v-card-item>
+        <div
+          v-if="lock.manufacturer || lock.model || lock.firmware"
+          class="px-4 pb-3 d-flex flex-wrap"
+          style="gap: 8px"
+        >
           <v-chip
-            :color="lock.connected ? 'success' : 'grey'"
-            size="small"
-            variant="flat"
-            :prepend-icon="lock.connected ? 'mdi-bluetooth-connect' : 'mdi-bluetooth-off'"
-          >{{ lock.connected ? $t('lock.connected') : $t('lock.disconnected') }}</v-chip>
-        </template>
-      </v-card-item>
+            v-if="lock.manufacturer"
+            size="x-small"
+            color="white"
+            variant="outlined"
+            prepend-icon="mdi-factory"
+          >{{ lock.manufacturer }}</v-chip>
+          <v-chip
+            v-if="lock.model"
+            size="x-small"
+            color="white"
+            variant="outlined"
+            prepend-icon="mdi-barcode"
+          >{{ lock.model }}</v-chip>
+          <v-chip
+            v-if="lock.firmware"
+            size="x-small"
+            color="white"
+            variant="outlined"
+            prepend-icon="mdi-memory"
+          >{{ lock.firmware }}</v-chip>
+        </div>
+      </div>
     </v-card>
 
     <v-row>
@@ -58,6 +87,7 @@
                   persistent-hint
                   :hint="$t('settings.soundHint')"
                   color="primary"
+                  density="compact"
                   inset
                 />
               </v-col>
@@ -79,37 +109,10 @@
         </v-card>
       </v-col>
 
-      <!-- Informations appareil -->
-      <v-col cols="12" md="6" v-if="lock.manufacturer || lock.model || lock.firmware">
-        <v-card class="h-100" rounded="lg" elevation="1">
-          <div class="bg-warning pa-3 d-flex align-center rounded-t-lg">
-            <v-icon icon="mdi-information-outline" color="white" class="mr-2" size="20" />
-            <span class="text-white text-body-2 font-weight-medium">{{ $t('settings.deviceInfo') }}</span>
-          </div>
-          <v-list density="compact" lines="two" class="py-2">
-            <v-list-item v-if="lock.manufacturer" prepend-icon="mdi-factory">
-              <v-list-item-title class="text-body-2 font-weight-medium">{{ $t('settings.manufacturer') }}</v-list-item-title>
-              <v-list-item-subtitle>{{ lock.manufacturer }}</v-list-item-subtitle>
-            </v-list-item>
-            <v-divider v-if="lock.manufacturer && (lock.model || lock.firmware)" inset />
-            <v-list-item v-if="lock.model" prepend-icon="mdi-barcode">
-              <v-list-item-title class="text-body-2 font-weight-medium">{{ $t('settings.model') }}</v-list-item-title>
-              <v-list-item-subtitle>{{ lock.model }}</v-list-item-subtitle>
-            </v-list-item>
-            <v-divider v-if="lock.model && lock.firmware" inset />
-            <v-list-item v-if="lock.firmware" prepend-icon="mdi-memory">
-              <v-list-item-title class="text-body-2 font-weight-medium">{{ $t('settings.firmware') }}</v-list-item-title>
-              <v-list-item-subtitle>
-                <v-chip size="x-small" color="teal" variant="tonal" class="mr-1">{{ lock.firmware }}</v-chip>
-              </v-list-item-subtitle>
-            </v-list-item>
-          </v-list>
-        </v-card>
-      </v-col>
-
-      <!-- Synchroniser l'horloge -->
+      <!-- Colonne droite : Synchro horloge + Zone dangereuse empilées -->
       <v-col cols="12" md="6">
-        <v-card class="h-100" rounded="lg" elevation="1">
+        <!-- Synchroniser l'horloge -->
+        <v-card class="mb-4" rounded="lg" elevation="1">
           <div class="bg-primary pa-3 d-flex align-center rounded-t-lg">
             <v-icon icon="mdi-clock-outline" color="white" class="mr-2" size="20" />
             <span class="text-white text-body-2 font-weight-medium">{{ $t('settings.syncClock') }}</span>
@@ -128,11 +131,9 @@
             </div>
           </v-card-text>
         </v-card>
-      </v-col>
 
-      <!-- Zone dangereuse -->
-      <v-col cols="12" md="6">
-        <v-card class="h-100" rounded="lg" elevation="1" border="error sm">
+        <!-- Zone dangereuse -->
+        <v-card rounded="lg" elevation="1" border="error sm">
           <div class="bg-error pa-3 d-flex align-center rounded-t-lg">
             <v-icon icon="mdi-alert-circle-outline" color="white" class="mr-2" size="20" />
             <span class="text-white text-body-2 font-weight-medium">{{ $t('settings.dangerZone') }}</span>
