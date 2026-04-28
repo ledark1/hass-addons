@@ -1,5 +1,5 @@
 <template>
-  <v-container v-if="lock.name" style="max-width: 1100px">
+  <v-container v-if="lock.address" style="max-width: 1100px">
 
     <!-- Header -->
     <v-card class="mb-4" rounded="lg" elevation="2">
@@ -195,16 +195,12 @@ export default {
     },
   },
   created() {
-    if (!this.lock.name) {
-      this.$router.push({ name: "Home" })
-    } else {
+    if (this.lock.address) {
       this.autoLockTime = this.lock.autoLockTime
       this.audio = this.lock.audio
       this.$store.commit("setActiveLockAddress", this.lock.address)
-      this.$store.dispatch("saveSettings", {
-        lockAddress: this.address,
-        settings: { getAudio: true }
-      })
+    } else {
+      this.$router.push({ name: "Home" })
     }
   },
   beforeUnmount() {

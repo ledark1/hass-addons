@@ -99,11 +99,11 @@ export default {
     },
   },
   created() {
-    if (!this.lock.name) {
-      this.$router.push({ name: "Home" })
-    } else {
+    if (this.lock.address) {
       this.$store.commit("setActiveLockAddress", this.lock.address)
       this.$store.dispatch("readOperations", this.lock.address)
+    } else {
+      this.$router.push({ name: "Home" })
     }
   },
   beforeUnmount() {
