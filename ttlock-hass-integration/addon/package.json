@@ -30,7 +30,7 @@
   "dependencies": {
     "async-mqtt": "^2.6.1",
     "express": "^4.17.1",
-    "ttlock-sdk-js": "github:domodom30/ttlock-sdk-js",
+    "ttlock-sdk-js": "^0.3.14",
     "ws": "^7.4.2"
   },
   "devDependencies": {
