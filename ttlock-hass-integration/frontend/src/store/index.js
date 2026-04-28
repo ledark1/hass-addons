@@ -26,7 +26,8 @@ const store = createStore({
     waitingConfig: false,
     waitingAutoLock: false,
     waitingSettings: false,
-    waitingCalibrate: false
+    waitingCalibrate: false,
+    calibrateSuccess: null
   },
   mutations: {
     setReady(state) {
@@ -161,6 +162,9 @@ const store = createStore({
     },
     setWaitingCalibrate(state, isWaiting) {
       state.waitingCalibrate = isWaiting;
+    },
+    setCalibrateSuccess(state, success) {
+      state.calibrateSuccess = success;
     },
     setWaitingOperations(state, isWaiting) {
       state.waitingOperations = isWaiting;

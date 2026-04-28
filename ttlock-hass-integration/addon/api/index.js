@@ -244,7 +244,14 @@ module.exports = async (server) => {
                 }
               }
 
-              if (confirmedSettings.autolock || confirmedSettings.audio) {
+              if (settings.calibrate) {
+                confirmedSettings.calibrate = await manager.calibrateTime(msg.data.address);
+                if (confirmedSettings.calibrate !== true) {
+                  api.sendError('Failed to calibrate lock clock', msg);
+                }
+              }
+
+              if (confirmedSettings.autolock || confirmedSettings.audio || confirmedSettings.calibrate) {
                 // allow lock status update to be sent before sending configuration confirmation
                 await sleep(10);
               }

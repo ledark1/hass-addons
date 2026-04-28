@@ -40,6 +40,8 @@
     "firmware": "Firmware",
     "syncClock": "Sync clock",
     "syncClockHint": "Synchronize the lock's clock with system time",
+    "syncClockSuccess": "Clock synchronized successfully",
+    "syncClockError": "Failed to synchronize the lock clock",
     "unpairWarning": "Unpairing will remove all credentials stored and will reset the lock to defaults.",
     "unpair": "Unpair",
     "confirmUnpair": "Are you sure you want to unpair this lock ?",

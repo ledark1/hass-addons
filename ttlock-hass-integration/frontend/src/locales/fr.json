@@ -40,6 +40,8 @@
     "firmware": "Firmware",
     "syncClock": "Synchroniser l'horloge",
     "syncClockHint": "Synchronise l'horloge de la serrure avec l'heure système",
+    "syncClockSuccess": "Horloge synchronisée avec succès",
+    "syncClockError": "Échec de la synchronisation de l'horloge",
     "unpairWarning": "Le désappairage supprimera tous les identifiants enregistrés et réinitialisera la serrure.",
     "unpair": "Désappairer",
     "confirmUnpair": "Êtes-vous sûr de vouloir désappairer cette serrure ?",

@@ -150,6 +150,11 @@
     </v-row>
 
     <ConfirmDlg ref="confirm" />
+
+    <!-- Snackbar retour synchronisation -->
+    <v-snackbar v-model="calibrateSnackbar" :color="calibrateSnackbarColor" timeout="3000" location="bottom">
+      {{ calibrateSnackbarText }}
+    </v-snackbar>
   </v-container>
 </template>
 
@@ -166,6 +171,9 @@ export default {
       address: this.$route.params.address || this.address,
       autoLockTime: -1,
       audio: false,
+      calibrateSnackbar: false,
+      calibrateSnackbarColor: 'success',
+      calibrateSnackbarText: '',
     }
   },
   computed: {
@@ -177,6 +185,9 @@ export default {
     },
     waitingCalibrate() {
       return this.$store.state.waitingCalibrate
+    },
+    calibrateSuccess() {
+      return this.$store.state.calibrateSuccess
     },
     autoLockHint() {
       if (this.lock.hasAutoLock) {
@@ -235,6 +246,18 @@ export default {
         this.autoLockTime = this.lock.autoLockTime
         this.audio = this.lock.audio
       }
+    },
+    calibrateSuccess(newVal) {
+      if (newVal === null) return
+      if (newVal === true) {
+        this.calibrateSnackbarColor = 'success'
+        this.calibrateSnackbarText = this.$t('settings.syncClockSuccess')
+      } else {
+        this.calibrateSnackbarColor = 'error'
+        this.calibrateSnackbarText = this.$t('settings.syncClockError')
+      }
+      this.calibrateSnackbar = true
+      this.$store.commit('setCalibrateSuccess', null)
     },
   },
 }

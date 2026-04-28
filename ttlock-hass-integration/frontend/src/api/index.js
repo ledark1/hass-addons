@@ -254,6 +254,9 @@ class Api {
             break;
           case 'settings':
             this.store.commit('setWaitingSettings', false);
+            if (this.store.state.waitingCalibrate) {
+              this.store.commit('setCalibrateSuccess', message.data?.settings?.calibrate === true);
+            }
             this.store.commit('setWaitingCalibrate', false);
             break;
           case 'error':
