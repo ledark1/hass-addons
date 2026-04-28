@@ -596,10 +596,11 @@ class Manager extends EventEmitter {
           return false;
         }
         try {
-          // The SDK does not expose a public calibrateTime() method.
-          // We must: 1) admin-login to get the AES session, 2) call calibrateTimeCommand()
-          const loggedIn = await withTimeout(lock.macro_adminLogin(), 10000, 'macro_adminLogin ' + address);
-          if (!loggedIn) throw new Error('Admin login failed');
+          // calibrateTimeCommand() only needs this.privateData.aesKey which is stored
+          // in the lock data since pairing — no macro_adminLogin() required.
+          // macro_adminLogin triggers checkAdminCommand which causes the TTLock to
+          // disconnect after connect(true) (skipDataRead), because the firmware expects
+          // the full connect(false) handshake before accepting admin-level commands.
           await withTimeout(lock.calibrateTimeCommand(), 10000, 'calibrateTimeCommand ' + address);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
           return true;
