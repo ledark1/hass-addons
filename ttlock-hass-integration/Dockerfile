@@ -38,7 +38,10 @@ COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
 # install npm deps (BLE needs build tools)
-RUN npm install --build-from-source
+# NPM_CONFIG_INCLUDE=dev ensures devDependencies (typescript) are available
+# for the SDK's prepare/build script when installing from GitHub source.
+# Once built, devDependencies are no longer needed at runtime.
+RUN NPM_CONFIG_INCLUDE=dev npm install --build-from-source
 
 # =========================
 # 🚀 entrypoint
