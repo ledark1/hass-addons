@@ -1152,21 +1152,38 @@ class Manager extends EventEmitter {
 
     // if lock has new operations read the operations and send updates
     if (paramsChanged.newEvents == true && lock.hasNewEvents()) {
-      // Cooldown: skip if we already processed the log recently (BLE advertisement keeps newEvents=true
-      // even after a successful fetch, which would cause an infinite reconnect loop).
+      // The TTLock SDK emits paramsChanged.newEvents=true only on a false→true transition of
+      // lock.newEvents. If we set lock.newEvents=false ourselves the SDK will re-emit on the
+      // very next advertisement (false→true again) causing an infinite spam loop.
+      // Strategy: never set lock.newEvents=false here except after a failed connect where we
+      // genuinely want a retry on the next ad. For cooldown/busy paths we schedule a deferred
+      // reset so the retry happens after the cooldown expires rather than immediately.
       const OPLOG_COOLDOWN_MS = 60 * 1000;
       if (lock._lastOperationLogFetch && Date.now() - lock._lastOperationLogFetch < OPLOG_COOLDOWN_MS) {
-        lock.newEvents = false;
+        // Still within cooldown — don't reconnect, don't touch lock.newEvents (avoid spam loop).
+        // Schedule a one-shot reset so we retry once the cooldown expires.
+        if (!lock._newEventsResetTimer) {
+          const remaining = OPLOG_COOLDOWN_MS - (Date.now() - lock._lastOperationLogFetch);
+          lock._newEventsResetTimer = setTimeout(() => {
+            lock._newEventsResetTimer = null;
+            lock.newEvents = false; // triggers re-emit on next advertisement → retry
+          }, remaining);
+        }
         return;
       }
       if (!lock.isConnected() && !lock._processingOperationLog && !this.waitingForConnect.has(lock.getAddress())) {
+        // Cancel any pending deferred reset — we are about to process now
+        if (lock._newEventsResetTimer) {
+          clearTimeout(lock._newEventsResetTimer);
+          lock._newEventsResetTimer = null;
+        }
         // Hold the BLE mutex during this background read so we don't race with user ops.
         const release = await this._acquireMutex(lock.getAddress());
         let weConnected = false;
         try {
           const result = await lock.connect(true); // skipDataRead=true
           if (!result) {
-            lock.newEvents = false; // allow re-detection on next advertisement
+            lock.newEvents = false; // connect failed — allow retry on next advertisement
             return;
           }
           weConnected = true;
@@ -1176,7 +1193,7 @@ class Manager extends EventEmitter {
           // during readBasicInfo(). Swallow it here — _onLockUpdated is called via EventEmitter
           // and has no awaiter, so any unhandled rejection becomes an uncaughtException.
           console.error('_onLockUpdated connect/process error:', error.message);
-          lock.newEvents = false;
+          lock.newEvents = false; // connect failed — allow retry on next advertisement
         } finally {
           // Disconnect inside the mutex so the next user op gets a clean session.
           if (weConnected && lock.isConnected()) {
@@ -1184,10 +1201,10 @@ class Manager extends EventEmitter {
           }
           release();
         }
-      } else {
-        // lock already connected or operation in progress — reset so next advertisement can re-trigger
-        lock.newEvents = false;
       }
+      // If lock is already connected / busy: do nothing. The ongoing operation will call
+      // _processOperationLog or disconnect, which sets lock._lastOperationLogFetch and the
+      // normal cooldown path will take over. Don't touch lock.newEvents here (avoids spam).
     }
     if (paramsChanged.lockedStatus == true) {
       // paramsChanged.lockedStatus means the BLE advertisement contains a status update.
