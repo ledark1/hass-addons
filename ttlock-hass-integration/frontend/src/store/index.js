@@ -203,22 +203,26 @@ const store = createStore({
       api.setAutoLock(lockAddress, time);
     },
     async readCredentials({ state, commit }, lockAddress) {
-      if (state.waiting || state.waitingCredentials) return;
+      // Do NOT guard with state.waiting: the BLE mutex in manager.js serialises ops
+      // server-side. Blocking here when a lock/unlock is in progress causes the spinner
+      // to stay stuck forever because waitingCredentials is never set to true and the
+      // watcher in Credentials.vue never fires once state.waiting clears.
+      if (state.waitingCredentials) return;
       commit('setWaitingCredentials');
       api.requestCredentials(lockAddress);
     },
     async setPasscode({ state, commit }, { lockAddress, passcode }) {
-      if (state.waiting || state.waitingCredentials) return;
+      if (state.waitingCredentials) return;
       commit('setWaitingCredentials');
       api.setPasscode(lockAddress, passcode);
     },
     async setCard({ state, commit }, { lockAddress, card }) {
-      if (state.waiting || state.waitingCredentials) return;
+      if (state.waitingCredentials) return;
       commit('setWaitingCredentials');
       api.setCard(lockAddress, card);
     },
     async setFinger({ state, commit }, { lockAddress, finger }) {
-      if (state.waiting || state.waitingCredentials) return;
+      if (state.waitingCredentials) return;
       commit('setWaitingCredentials');
       api.setFinger(lockAddress, finger);
     },
