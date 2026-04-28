@@ -60,6 +60,14 @@ class Manager extends EventEmitter {
     this.waitingForConnect = new Set();
     /** @type {Map<string, NodeJS.Timeout>} Pending/running retry timers keyed by address */
     this.connectRetryTimers = new Map();
+    /** @type {Map<string, Promise<void>>} Per-lock BLE mutex tail (serializes BLE access on a given address) */
+    this._bleMutex = new Map();
+    /** @type {Map<string, () => void>} Active mutex release functions keyed by address — held between _connectLock and _releaseConnect */
+    this._mutexReleases = new Map();
+    /** @type {Map<string, boolean>} Last known audio (lockSound) status per lock — populated by successful BLE reads/writes */
+    this._cachedAudio = new Map();
+    /** @type {Map<string, number>} Last known autoLockTime per lock */
+    this._cachedAutoLock = new Map();
     /** @type {'none'|'noble'} */
     this.gateway = 'none';
     this.gateway_host = '';
@@ -290,6 +298,7 @@ class Manager extends EventEmitter {
         }
         try {
           const res = await withTimeout(lock.setAutoLockTime(value), 15000, 'setAutoLock ' + address);
+          if (res !== false) this._cachedAutoLock.set(address, value);
           this.emit('lockUpdated', lock);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
           return res;
@@ -307,14 +316,38 @@ class Manager extends EventEmitter {
   }
 
   async getCredentials(address) {
-    const passcodes = await this.getPasscodes(address);
-    const cards = await this.getCards(address);
-    const fingers = await this.getFingers(address);
-    return {
-      passcodes: passcodes,
-      cards: cards,
-      fingers: fingers
-    };
+    const lock = this.pairedLocks.get(address);
+    if (lock === undefined) {
+      return { passcodes: false, cards: false, fingers: false };
+    }
+    // Single connect/admin-login session for all three reads — avoids three separate
+    // BLE handshakes and the "Command already in progress" collisions that happen
+    // when each sub-call grabs/releases the connection independently.
+    if (!(await this._connectLock(lock))) {
+      return { passcodes: false, cards: false, fingers: false };
+    }
+    try {
+      const passcodes = lock.hasPassCode()
+        ? await lock.getPassCodes().catch((e) => { console.error('getPassCodes:', e.message); return false; })
+        : false;
+      const cardsRaw = lock.hasICCard()
+        ? await lock.getICCards().catch((e) => { console.error('getICCards:', e.message); return false; })
+        : false;
+      let cards = cardsRaw;
+      if (Array.isArray(cardsRaw)) {
+        for (const card of cardsRaw) card.alias = store.getCardAlias(card.cardNumber);
+      }
+      const fingersRaw = lock.hasFingerprint()
+        ? await lock.getFingerprints().catch((e) => { console.error('getFingerprints:', e.message); return false; })
+        : false;
+      let fingers = fingersRaw;
+      if (Array.isArray(fingersRaw)) {
+        for (const f of fingersRaw) f.alias = store.getFingerAlias(f.fpNumber);
+      }
+      return { passcodes, cards, fingers };
+    } finally {
+      this._releaseConnect(address);
+    }
   }
 
   async addPasscode(address, type, passCode, startDate, endDate) {
@@ -524,6 +557,7 @@ class Manager extends EventEmitter {
         try {
           const sound = audio ? AudioManage.TURN_ON : AudioManage.TURN_OFF;
           const res = await withTimeout(lock.setLockSound(sound), 15000, 'setAudio ' + address);
+          if (res !== false) this._cachedAudio.set(address, audio);
           this.emit('lockUpdated', lock);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
           return res;
@@ -572,16 +606,11 @@ class Manager extends EventEmitter {
   async getAudio(address) {
     const lock = this.pairedLocks.get(address);
     if (!lock?.hasLockSound()) return false;
-    // Try cached value first (populated during initial connect(false))
-    try {
-      const cached = await lock.getLockSound();
-      if (cached === AudioManage.TURN_ON || cached === AudioManage.TURN_OFF) {
-        return cached === AudioManage.TURN_ON;
-      }
-    } catch (error) {
-      console.error('Error reading cached audio value for', address, ':', error.message);
+    // Manager-level cache (populated by previous reads/writes) — no BLE, no mutex.
+    if (this._cachedAudio.has(address)) {
+      return this._cachedAudio.get(address);
     }
-    // Cache empty: connect and read from lock
+    // Cache empty: connect and read from lock (mutex held via _connectLock)
     try {
       for (let attempt = 1; attempt <= 3; attempt++) {
         if (!(await this._connectLock(lock))) {
@@ -593,9 +622,13 @@ class Manager extends EventEmitter {
         }
         try {
           const sound = await withTimeout(lock.getLockSound(true), 15000, 'getAudio ' + address);
+          const audio = sound === AudioManage.TURN_ON;
+          if (sound === AudioManage.TURN_ON || sound === AudioManage.TURN_OFF) {
+            this._cachedAudio.set(address, audio);
+          }
           this.emit('lockUpdated', lock);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          return sound === AudioManage.TURN_ON;
+          return audio;
         } catch (error) {
           console.error(`getAudio attempt ${attempt}/3 error:`, error.message);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
@@ -679,15 +712,59 @@ class Manager extends EventEmitter {
   }
 
   /**
+   * Acquire the per-address BLE mutex. Returns a release function. Callers must
+   * always invoke the release function (typically via try/finally), even on error.
+   * @param {string} address
+   * @returns {Promise<() => void>}
+   */
+  async _acquireMutex(address) {
+    while (this._bleMutex.has(address)) {
+      try {
+        await this._bleMutex.get(address);
+      } catch (_) {}
+    }
+    let release;
+    const promise = new Promise((r) => (release = r));
+    this._bleMutex.set(address, promise);
+    return () => {
+      if (this._bleMutex.get(address) === promise) {
+        this._bleMutex.delete(address);
+      }
+      release();
+    };
+  }
+
+  /**
+   * True if a BLE op is currently in flight on this lock (mutex held).
+   * @param {string} address
+   */
+  isLockBusy(address) {
+    return this._bleMutex.has(address) || this.waitingForConnect.has(address);
+  }
+
+  getCachedAudio(address) {
+    return this._cachedAudio.get(address);
+  }
+
+  getCachedAutoLock(address) {
+    return this._cachedAutoLock.get(address);
+  }
+
+  /**
    *
    * @param {import('ttlock-sdk-js').TTLock} lock
    * @param {boolean} readData
    */
   async _connectLock(lock) {
     const address = lock.getAddress();
+    // Serialize all BLE ops on this lock — without this, parallel user ops collide
+    // on the same BLE session and the SDK rejects them with "Command already in progress".
+    const release = await this._acquireMutex(address);
+    this._mutexReleases.set(address, release);
     this.waitingForConnect.add(address);
     if (this.scanning) {
       this.waitingForConnect.delete(address);
+      this._releaseMutex(address);
       return false;
     }
     if (lock.isConnected()) return true;
@@ -729,7 +806,22 @@ class Manager extends EventEmitter {
     }
     console.log('All connect attempts failed for', address);
     this.waitingForConnect.delete(address);
+    // Release the mutex so a caller-side retry loop can re-acquire it without deadlocking.
+    // _releaseConnect (called from caller's finally) will then no-op for this address.
+    this._releaseMutex(address);
     return false;
+  }
+
+  /**
+   * Release the per-address mutex if held. Idempotent — safe to call multiple times.
+   * @param {string} address
+   */
+  _releaseMutex(address) {
+    const release = this._mutexReleases.get(address);
+    if (release) {
+      this._mutexReleases.delete(address);
+      release();
+    }
   }
 
   // Called by every user operation in a finally block to release the waitingForConnect
@@ -745,6 +837,9 @@ class Manager extends EventEmitter {
         this.emit('lockUpdated', lock);
       }
     }
+    // Release mutex last so that any handler triggered by lockUpdated (e.g. sendLockStatus)
+    // sees the lock as still busy — they should fall back to cache instead of issuing BLE.
+    this._releaseMutex(address);
   }
 
   async _onScanStarted() {
@@ -762,19 +857,26 @@ class Manager extends EventEmitter {
     }
     for (let [address, lock] of this.connectQueue) {
       console.log('Auto connect to', address);
-      // connect(false) to read device features (firmware, autoLock, passCode, etc.)
-      const result = await lock.connect(false);
-      if (result === true) {
-        // Remove from connectQueue BEFORE disconnecting so _onLockDisconnected
-        // can call startMonitor() correctly
-        this.connectQueue.delete(address);
-        if (lock.isConnected() && !this.waitingForConnect.has(address)) {
-          await lock.disconnect();
+      // Hold the per-lock BLE mutex so this background connect doesn't race with a
+      // user op that fires the moment scanning=false flips.
+      const release = await this._acquireMutex(address);
+      try {
+        // connect(false) to read device features (firmware, autoLock, passCode, etc.)
+        const result = await lock.connect(false);
+        if (result === true) {
+          // Remove from connectQueue BEFORE disconnecting so _onLockDisconnected
+          // can call startMonitor() correctly
+          this.connectQueue.delete(address);
+          if (lock.isConnected() && !this.waitingForConnect.has(address)) {
+            await lock.disconnect();
+          }
+          console.log('Successful connect attempt to paired lock', address);
+        } else {
+          console.log('Unsuccessful connect attempt to paired lock', address);
+          // lock stays in connectQueue for next retry
         }
-        console.log('Successful connect attempt to paired lock', address);
-      } else {
-        console.log('Unsuccessful connect attempt to paired lock', address);
-        // lock stays in connectQueue for next retry
+      } finally {
+        release();
       }
     }
 
@@ -802,29 +904,37 @@ class Manager extends EventEmitter {
           // Add to connectQueue BEFORE connecting so _onLockDisconnected sees it
           // if the disconnect event fires during the connect attempt
           this.connectQueue.set(lock.getAddress(), lock);
-          // connect(false) = full connect: reads firmware, features (autoLock, passCode, etc.)
-          // The lock may self-disconnect after searchDeviceFeatureCommand — handle both cases
-          const result = await lock.connect(false);
-          if (result == true) {
-            console.log('Successful connect attempt to paired lock', lock.getAddress());
-            this.connectQueue.delete(lock.getAddress());
-            if (lock.isConnected()) {
-              if (this.waitingForConnect.has(lock.getAddress())) {
-                // connect(false) may have left corrupted session (e.g. failed checkRandom)
-                // Force disconnect so _connectLock gets a fresh session via connect(true)
-                await lock.disconnect().catch(() => {});
-              } else {
-                // No user operation waiting: process log and disconnect normally
-                await this._processOperationLog(lock);
-                await lock.disconnect();
+          // Hold the per-lock BLE mutex during the initial connect so user-op connects
+          // don't race with us on the same BLE session.
+          const release = await this._acquireMutex(lock.getAddress());
+          let result = false;
+          try {
+            // connect(false) = full connect: reads firmware, features (autoLock, passCode, etc.)
+            // The lock may self-disconnect after searchDeviceFeatureCommand — handle both cases
+            result = await lock.connect(false);
+            if (result == true) {
+              console.log('Successful connect attempt to paired lock', lock.getAddress());
+              this.connectQueue.delete(lock.getAddress());
+              if (lock.isConnected()) {
+                if (this.waitingForConnect.has(lock.getAddress())) {
+                  // connect(false) may have left corrupted session (e.g. failed checkRandom)
+                  // Force disconnect so _connectLock gets a fresh session via connect(true)
+                  await lock.disconnect().catch(() => {});
+                } else {
+                  // No user operation waiting: process log and disconnect normally
+                  await this._processOperationLog(lock);
+                  await lock.disconnect();
+                }
               }
+              // else: lock self-disconnected after feature scan (normal TTLock behavior)
+              // _onLockDisconnected will restart monitor
+              // _onLockUpdated will read operation log on next advertisement change
+            } else {
+              console.log('Unsuccessful connect attempt to paired lock', lock.getAddress());
+              // lock stays in connectQueue for retry on next scan
             }
-            // else: lock self-disconnected after feature scan (normal TTLock behavior)
-            // _onLockDisconnected will restart monitor
-            // _onLockUpdated will read operation log on next advertisement change
-          } else {
-            console.log('Unsuccessful connect attempt to paired lock', lock.getAddress());
-            // lock stays in connectQueue for retry on next scan
+          } finally {
+            release();
           }
         } else {
           // add it to the connect queue
@@ -914,22 +1024,29 @@ class Manager extends EventEmitter {
     console.log('Initial connect failed for', address, '— retrying connect in 5s');
     const handle = setTimeout(async () => {
       console.log('Retrying initial connect for', address);
-      const result = await lock.connect(false);
-      this.connectRetryTimers.delete(address);
-      if (result) {
-        console.log('Retry connect succeeded for', address);
-        this.connectQueue.delete(address);
-        if (lock.isConnected() && !this.waitingForConnect.has(address)) {
-          await this._processOperationLog(lock);
-          await lock.disconnect().catch(() => {});
+      // Hold the per-lock BLE mutex while retrying so we don't race with user ops.
+      const release = await this._acquireMutex(address);
+      let result = false;
+      try {
+        result = await lock.connect(false);
+        this.connectRetryTimers.delete(address);
+        if (result) {
+          console.log('Retry connect succeeded for', address);
+          this.connectQueue.delete(address);
+          if (lock.isConnected() && !this.waitingForConnect.has(address)) {
+            await this._processOperationLog(lock);
+            await lock.disconnect().catch(() => {});
+          }
+        } else {
+          console.log('Retry connect failed for', address);
+          // If _onLockDisconnected fired during connect(false) it was blocked by the
+          // dedup guard — reschedule explicitly so the lock eventually initializes.
+          if (this.connectQueue.has(address)) {
+            this._scheduleRetry(lock);
+          }
         }
-      } else {
-        console.log('Retry connect failed for', address);
-        // If _onLockDisconnected fired during connect(false) it was blocked by the
-        // dedup guard — reschedule explicitly so the lock eventually initializes.
-        if (this.connectQueue.has(address)) {
-          this._scheduleRetry(lock);
-        }
+      } finally {
+        release();
       }
     }, 5000);
     this.connectRetryTimers.set(address, handle);
@@ -982,7 +1099,6 @@ class Manager extends EventEmitter {
    */
   async _onLockUpdated(lock, paramsChanged) {
     console.log('lockUpdated', paramsChanged);
-    let weConnected = false;
 
     // if lock has new operations read the operations and send updates
     if (paramsChanged.newEvents == true && lock.hasNewEvents()) {
@@ -994,15 +1110,24 @@ class Manager extends EventEmitter {
         return;
       }
       if (!lock.isConnected() && !lock._processingOperationLog && !this.waitingForConnect.has(lock.getAddress())) {
-        const result = await lock.connect(true); // skipDataRead=true
-        if (!result) {
-          lock.newEvents = false; // allow re-detection on next advertisement
-          return;
+        // Hold the BLE mutex during this background read so we don't race with user ops.
+        const release = await this._acquireMutex(lock.getAddress());
+        let weConnected = false;
+        try {
+          const result = await lock.connect(true); // skipDataRead=true
+          if (!result) {
+            lock.newEvents = false; // allow re-detection on next advertisement
+            return;
+          }
+          weConnected = true;
+          await this._processOperationLog(lock);
+        } finally {
+          // Disconnect inside the mutex so the next user op gets a clean session.
+          if (weConnected && lock.isConnected()) {
+            await lock.disconnect().catch(() => {});
+          }
+          release();
         }
-        weConnected = true;
-      }
-      if (weConnected) {
-        await this._processOperationLog(lock);
       } else {
         // lock already connected or operation in progress — reset so next advertisement can re-trigger
         lock.newEvents = false;
@@ -1037,11 +1162,7 @@ class Manager extends EventEmitter {
       this.emit('lockUpdated', lock);
       this.emit('lockBatteryUpdated', lock);
     }
-
-    // Only disconnect if we initiated the connection — avoids racing with user operations
-    if (weConnected) {
-      await lock.disconnect();
-    }
+    // Connect/disconnect for the newEvents branch is now handled inside the mutex above.
   }
 
   async _processOperationLog(lock) {

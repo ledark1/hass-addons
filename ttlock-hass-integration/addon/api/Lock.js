@@ -2,6 +2,7 @@
 
 const { AudioManage } = require('ttlock-sdk-js');
 const store = require('../src/store');
+const manager = require('../src/manager');
 
 class Lock {
   /** @type {string} MAC address */
@@ -58,23 +59,36 @@ class Lock {
     } catch (error) {
       // lock in pairing mode
     }
-    if (!lockObject.isConnected()) {
-      // Only do BLE reads when the lock is idle — avoids racing with user operations.
+    // STRICTLY non-BLE from here on: this method runs on every status broadcast and must
+    // NEVER touch the BLE bus, otherwise it races with user ops (=> "Command already in progress").
+    // Use the Manager's in-memory caches, populated by successful read/write operations.
+    const cachedAutoLock = manager.getCachedAutoLock(lock.address);
+    if (cachedAutoLock !== undefined) {
+      lock.autoLockTime = cachedAutoLock;
+    } else if (!lockObject.isConnected() && !manager.isLockBusy(lock.address)) {
+      // SDK getter returns the cached value without BLE when one exists (set during initial
+      // connect(false)). When no cached value exists yet the SDK falls back to BLE — guard
+      // against that with the busy check above.
       try {
         lock.autoLockTime = await lockObject.getAutolockTime();
       } catch (error) {
         // not yet available
       }
     }
-    // getLockSound uses in-memory cache (no BLE) — safe to call even when connected
-    try {
-      const sound = await lockObject.getLockSound();
-      if (sound !== AudioManage.UNKNOWN) {
-        lock.audio = sound === AudioManage.TURN_ON;
+    const cachedAudio = manager.getCachedAudio(lock.address);
+    if (cachedAudio !== undefined) {
+      lock.audio = cachedAudio;
+    } else if (!manager.isLockBusy(lock.address)) {
+      // SDK returns the cached AudioManage value without BLE when one exists; only call when
+      // the lock is idle to avoid an opportunistic BLE write that would collide with user ops.
+      try {
+        const sound = await lockObject.getLockSound();
+        if (sound === AudioManage.TURN_ON || sound === AudioManage.TURN_OFF) {
+          lock.audio = sound === AudioManage.TURN_ON;
+        }
+      } catch (error) {
+        // not yet available (cache empty and not connected)
       }
-      // If UNKNOWN, leave lock.audio as undefined — chip won't show in UI
-    } catch (error) {
-      // not yet available (cache empty and not connected)
     }
     lock.hasAutoLock = lockObject.hasAutolock();
     lock.hasPasscode = lockObject.hasPassCode();
