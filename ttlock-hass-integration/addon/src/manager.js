@@ -1108,16 +1108,23 @@ class Manager extends EventEmitter {
    */
   async _onLockDisconnected(lock) {
     console.log('Disconnected from lock ' + lock.getAddress());
-    if (this.waitingForConnect.has(lock.getAddress())) {
+    const address = lock.getAddress();
+    if (this.waitingForConnect.has(address)) {
       // A user operation is in progress — do not restart monitor, _releaseConnect handles it.
       return;
     }
-    if (this.connectQueue.has(lock.getAddress())) {
-      if (this.connectRetryTimers.has(lock.getAddress())) {
+    if (this.connectQueue.has(address)) {
+      if (this.connectRetryTimers.has(address)) {
         // Retry already scheduled or running — ignore duplicate disconnect event
         return;
       }
       this._scheduleRetry(lock);
+      return;
+    }
+    // If the BLE mutex is held, a user operation is waiting to acquire it (e.g. _connectLock
+    // deleted connectQueue before getting the mutex, so the connectQueue check above is false).
+    // Do NOT start the monitor here — _releaseConnect will restart it once the op completes.
+    if (this._bleMutex.has(address)) {
       return;
     }
     // Normal disconnect after a user operation: restart monitor immediately.
