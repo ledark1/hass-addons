@@ -836,6 +836,19 @@ class Manager extends EventEmitter {
         const res = await withTimeout(lock.connect(true), 15000, 'connect ' + address);
         if (res) {
           console.log('Connected to', address);
+          // After connect(true), the SDK skips macro_adminLogin() in onConnected() because
+          // it only runs it when autoLockTime==-1 (first connect). Without admin login,
+          // checkUserTime (called by lock/unlock) causes the lock to disconnect immediately.
+          // Explicitly authenticate here so all subsequent commands work.
+          if (lock.featureList) {
+            const adminOk = await lock.macro_adminLogin().catch((e) => {
+              console.warn('macro_adminLogin failed:', e.message);
+              return false;
+            });
+            if (!adminOk) {
+              console.warn('macro_adminLogin returned false for', address, '— proceeding anyway');
+            }
+          }
           return true;
         }
         // The TTLock self-disconnects mid-handshake under load. After the SDK returns false
