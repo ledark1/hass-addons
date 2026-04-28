@@ -328,17 +328,26 @@ class Manager extends EventEmitter {
     }
     try {
       const passcodes = lock.hasPassCode()
-        ? await lock.getPassCodes().catch((e) => { console.error('getPassCodes:', e.message); return false; })
+        ? await lock.getPassCodes().catch((e) => {
+            console.error('getPassCodes:', e.message);
+            return false;
+          })
         : false;
       const cardsRaw = lock.hasICCard()
-        ? await lock.getICCards().catch((e) => { console.error('getICCards:', e.message); return false; })
+        ? await lock.getICCards().catch((e) => {
+            console.error('getICCards:', e.message);
+            return false;
+          })
         : false;
       let cards = cardsRaw;
       if (Array.isArray(cardsRaw)) {
         for (const card of cardsRaw) card.alias = store.getCardAlias(card.cardNumber);
       }
       const fingersRaw = lock.hasFingerprint()
-        ? await lock.getFingerprints().catch((e) => { console.error('getFingerprints:', e.message); return false; })
+        ? await lock.getFingerprints().catch((e) => {
+            console.error('getFingerprints:', e.message);
+            return false;
+          })
         : false;
       let fingers = fingersRaw;
       if (Array.isArray(fingersRaw)) {
@@ -761,6 +770,20 @@ class Manager extends EventEmitter {
    */
   async _connectLock(lock) {
     const address = lock.getAddress();
+    // Cancel any pending background retry (initial connect(false) loop) so that a user
+    // operation is never delayed indefinitely by a retrying connect(false) that holds the
+    // mutex for 5-15 s per attempt.  After cancellation we still call _acquireMutex below
+    // which will wait for any *currently-running* retry's connect(false) to finish and
+    // release the mutex before we proceed — that is safe because the retry checks
+    // connectQueue.has(address) AFTER releasing the mutex, so our delete below ensures it
+    // won't reschedule itself once we take over.
+    if (this.connectRetryTimers.has(address)) {
+      clearTimeout(this.connectRetryTimers.get(address));
+      this.connectRetryTimers.delete(address);
+    }
+    // Remove from connectQueue so that _onLockDisconnected / _scheduleRetry won't
+    // reschedule a retry once the mutex is ours.
+    this.connectQueue.delete(address);
     // Serialize all BLE ops on this lock — without this, parallel user ops collide
     // on the same BLE session and the SDK rejects them with "Command already in progress".
     const release = await this._acquireMutex(address);
