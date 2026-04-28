@@ -849,7 +849,19 @@ class Manager extends EventEmitter {
               console.warn('macro_adminLogin failed:', e.message);
               return false;
             });
+            if (!adminOk && !lock.isConnected()) {
+              // Lock disconnected during admin login — treat as connect failure and retry.
+              // Returning true here would make callers invoke BLE commands on a dead session.
+              console.warn('macro_adminLogin disconnected lock', address, '— retrying connect');
+              if (attempt < 3) {
+                await sleep(5000);
+                continue;
+              }
+              // All 3 attempts exhausted
+              break;
+            }
             if (!adminOk) {
+              // Admin login returned false but connection still alive — proceed optimistically.
               console.warn('macro_adminLogin returned false for', address, '— proceeding anyway');
             }
           }
