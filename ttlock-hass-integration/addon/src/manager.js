@@ -587,9 +587,13 @@ class Manager extends EventEmitter {
           return false;
         }
         try {
-          const res = await withTimeout(lock.calibrateTime(), 15000, 'calibrateTime ' + address);
+          // The SDK does not expose a public calibrateTime() method.
+          // We must: 1) admin-login to get the AES session, 2) call calibrateTimeCommand()
+          const loggedIn = await withTimeout(lock.macro_adminLogin(), 10000, 'macro_adminLogin ' + address);
+          if (!loggedIn) throw new Error('Admin login failed');
+          await withTimeout(lock.calibrateTimeCommand(), 10000, 'calibrateTimeCommand ' + address);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          return res;
+          return true;
         } catch (error) {
           console.error(`calibrateTime attempt ${attempt}/3 error:`, error.message);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
