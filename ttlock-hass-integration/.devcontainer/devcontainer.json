@@ -10,5 +10,5 @@
 		"/var/run/docker.sock:/var/run/docker.sock"
 	],
 	"workspaceFolder": "/workspaces/hass-addons/ttlock-hass-integration",
-	"postCreateCommand": "bash .devcontainer/start_ha.sh"
+	// "postCreateCommand": "bash .devcontainer/start_ha.sh"
 }
