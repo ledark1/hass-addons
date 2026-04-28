@@ -841,6 +841,10 @@ class Manager extends EventEmitter {
           // checkUserTime (called by lock/unlock) causes the lock to disconnect immediately.
           // Explicitly authenticate here so all subsequent commands work.
           if (lock.featureList) {
+            // Small delay: after connect(true) the lock firmware needs a moment before
+            // it can reliably handle the first BLE command (checkAdminCommand).
+            // Without this, ~50% of macro_adminLogin calls disconnect mid-command.
+            await sleep(300);
             const adminOk = await lock.macro_adminLogin().catch((e) => {
               console.warn('macro_adminLogin failed:', e.message);
               return false;
@@ -1291,6 +1295,11 @@ class Manager extends EventEmitter {
       }
     } catch (error) {
       console.error('_processOperationLog error:', error.message);
+      // Reset newEvents so the next advertisement doesn't immediately re-enter this path.
+      // Also stamp _lastOperationLogFetch so the cooldown guard fires for 60s —
+      // prevents a tight retry loop when the lock keeps disconnecting during the fetch.
+      lock.newEvents = false;
+      lock._lastOperationLogFetch = Date.now();
     } finally {
       lock._processingOperationLog = false;
     }
