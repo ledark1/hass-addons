@@ -48,7 +48,9 @@ class Lock {
     const lock = new Lock();
 
     lock.address = lockObject.getAddress();
-    lock.name = lockObject.getName();
+    // Fall back to the address when the SDK has no advertised name yet — guarantees
+    // downstream views don't disappear because of a momentarily empty name.
+    lock.name = lockObject.getName() || lock.address;
     lock.paired = lockObject.isPaired();
     lock.connected = lockObject.isConnected();
     lock.rssi = lockObject.getRssi();

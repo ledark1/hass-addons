@@ -47,7 +47,22 @@ const store = createStore({
       let updated = false;
       for (const lock of state.locks) {
         if (lock.address == updatedLock.address) {
-          newLocks.push(updatedLock);
+          // Merge over the previous entry instead of replacing it. The backend's
+          // Lock.fromTTLock may legitimately omit fields it cannot read at that moment
+          // (e.g. autoLockTime/audio while the lock is busy with a user op) — without
+          // this merge those fields would flicker to undefined and trigger UI re-renders
+          // (notably wiping `name` momentarily, which would hide whole views via v-if).
+          const merged = { ...lock };
+          for (const key of Object.keys(updatedLock)) {
+            const value = updatedLock[key];
+            // Skip undefined so the backend can omit unreadable fields without wiping
+            // them in the store. Keep false/0/"" since those are legitimate states for
+            // boolean/numeric fields.
+            if (value !== undefined) {
+              merged[key] = value;
+            }
+          }
+          newLocks.push(merged);
           updated = true;
         } else {
           newLocks.push(lock);

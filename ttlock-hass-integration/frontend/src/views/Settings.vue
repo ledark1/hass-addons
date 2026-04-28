@@ -88,7 +88,6 @@
                   :hint="$t('settings.soundHint')"
                   color="primary"
                   density="compact"
-                  inset
                 />
               </v-col>
             </v-row>

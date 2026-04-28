@@ -1,5 +1,5 @@
 <template>
-  <v-container v-if="lock.name">
+  <v-container v-if="lock.address">
     <v-card class="mb-4" variant="tonal" color="primary">
       <v-card-item>
         <template #prepend>
@@ -24,6 +24,8 @@
         :headers="headers"
         :items="sortedOperations"
         :loading="waitingOperations"
+        :items-per-page="50"
+        :items-per-page-options="[10, 25, 50, 100, -1]"
         density="compact"
       >
         <template #item.recordTypeCategory="{ item }">
