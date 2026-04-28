@@ -233,6 +233,7 @@ class Manager extends EventEmitter {
           console.error(`Unlock attempt ${attempt}/3 error:`, error.message);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
           if (attempt < 3) {
+            this._releaseMutex(address);
             console.log('Waiting 5s before retry...');
             await sleep(5000);
           }
@@ -272,6 +273,7 @@ class Manager extends EventEmitter {
           console.error(`Lock attempt ${attempt}/3 error:`, error.message);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
           if (attempt < 3) {
+            this._releaseMutex(address);
             console.log('Waiting 5s before retry...');
             await sleep(5000);
           }
@@ -305,7 +307,10 @@ class Manager extends EventEmitter {
         } catch (error) {
           console.error(`setAutoLock attempt ${attempt}/3 error:`, error.message);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          if (attempt < 3) await sleep(5000);
+          if (attempt < 3) {
+            this._releaseMutex(address);
+            await sleep(5000);
+          }
         }
       }
       console.log('All setAutoLock attempts failed for', address);
@@ -573,7 +578,10 @@ class Manager extends EventEmitter {
         } catch (error) {
           console.error(`setAudio attempt ${attempt}/3 error:`, error.message);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          if (attempt < 3) await sleep(5000);
+          if (attempt < 3) {
+            this._releaseMutex(address);
+            await sleep(5000);
+          }
         }
       }
       console.log('All setAudio attempts failed for', address);
@@ -607,7 +615,10 @@ class Manager extends EventEmitter {
         } catch (error) {
           console.error(`calibrateTime attempt ${attempt}/3 error:`, error.message);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          if (attempt < 3) await sleep(5000);
+          if (attempt < 3) {
+            this._releaseMutex(address);
+            await sleep(5000);
+          }
         }
       }
       console.log('All calibrateTime attempts failed for', address);
@@ -646,7 +657,10 @@ class Manager extends EventEmitter {
         } catch (error) {
           console.error(`getAudio attempt ${attempt}/3 error:`, error.message);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          if (attempt < 3) await sleep(5000);
+          if (attempt < 3) {
+            this._releaseMutex(address);
+            await sleep(5000);
+          }
         }
       }
       console.log('All getAudio attempts failed for', address);

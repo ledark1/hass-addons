@@ -1,6 +1,6 @@
 {
   "name": "TTLock",
-  "version": "1.5.17",
+  "version": "1.5.18",
   "slug": "ttlock-hass-integration",
   "description": "Integration of the offline TTLock SDK into Home Assistant",
   "url": "https://github.com/domodom30/hass-addons",
