@@ -615,6 +615,14 @@ class Manager extends EventEmitter {
         } catch (error) {
           console.error(`calibrateTime attempt ${attempt}/3 error:`, error.message);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
+          // "Failed setting lock time" = the lock explicitly rejected the command (FAILED
+          // response code). This is a known firmware limitation on some TTLock hardware
+          // (the SDK itself says "this seems to fail on some locks" and swallows the error
+          // during pairing). Retrying will not help — bail out immediately.
+          if (error.message === 'Failed setting lock time') {
+            console.log('calibrateTime: lock firmware does not support time calibration, giving up');
+            return false;
+          }
           if (attempt < 3) {
             this._releaseMutex(address);
             await sleep(5000);
@@ -1163,6 +1171,12 @@ class Manager extends EventEmitter {
           }
           weConnected = true;
           await this._processOperationLog(lock);
+        } catch (error) {
+          // lock.connect() can throw "NobleDevice is not connected" if BLE disconnects
+          // during readBasicInfo(). Swallow it here — _onLockUpdated is called via EventEmitter
+          // and has no awaiter, so any unhandled rejection becomes an uncaughtException.
+          console.error('_onLockUpdated connect/process error:', error.message);
+          lock.newEvents = false;
         } finally {
           // Disconnect inside the mutex so the next user op gets a clean session.
           if (weConnected && lock.isConnected()) {
