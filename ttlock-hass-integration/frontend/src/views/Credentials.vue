@@ -233,7 +233,7 @@ export default {
       if (passcode !== undefined) {
         if (await this.$refs.confirm.open(this.$t('common.confirm'), this.$t('credentials.confirmDeletePin'))) {
           let p = structuredClone(passcode)
-          p.passCode = passcode.newPassCode
+          p.passCode = passcode.passCode
           p.newPassCode = -1
           this.$store.dispatch("setPasscode", { lockAddress: this.address, passcode: p })
           this.passcodes = -1
@@ -251,8 +251,9 @@ export default {
     async showDeleteCardDialog(card) {
       if (card !== undefined) {
         if (await this.$refs.confirm.open(this.$t('common.confirm'), this.$t('credentials.confirmDeleteCard'))) {
-          card.startDate = -1
-          this.$store.dispatch("setCard", { lockAddress: this.address, card: card })
+          const c = structuredClone(card)
+          c.startDate = -1
+          this.$store.dispatch("setCard", { lockAddress: this.address, card: c })
           this.cards = -1
         }
       }
@@ -268,8 +269,9 @@ export default {
     async showDeleteFingerDialog(finger) {
       if (finger !== undefined) {
         if (await this.$refs.confirm.open(this.$t('common.confirm'), this.$t('credentials.confirmDeleteFinger'))) {
-          finger.startDate = -1
-          this.$store.dispatch("setFinger", { lockAddress: this.address, finger: finger })
+          const f = structuredClone(finger)
+          f.startDate = -1
+          this.$store.dispatch("setFinger", { lockAddress: this.address, finger: f })
           this.fingers = -1
         }
       }

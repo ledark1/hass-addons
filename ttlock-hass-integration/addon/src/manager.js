@@ -596,7 +596,8 @@ class Manager extends EventEmitter {
     if (lock === undefined) return false;
     try {
       for (let attempt = 1; attempt <= 3; attempt++) {
-        if (!(await this._connectLock(lock, false))) {  // calibrateTimeCommand needs no adminAuth
+        if (!(await this._connectLock(lock, false))) {
+          // calibrateTimeCommand needs no adminAuth
           if (attempt < 3) {
             await sleep(5000);
             continue;
@@ -644,7 +645,8 @@ class Manager extends EventEmitter {
     // Cache empty: connect and read from lock (mutex held via _connectLock)
     try {
       for (let attempt = 1; attempt <= 3; attempt++) {
-        if (!(await this._connectLock(lock, false))) {  // getLockSound needs no adminAuth
+        if (!(await this._connectLock(lock, false))) {
+          // getLockSound needs no adminAuth
           if (attempt < 3) {
             await sleep(5000);
             continue;
@@ -681,7 +683,8 @@ class Manager extends EventEmitter {
     if (lock == undefined) {
       return false;
     }
-    if (!(await this._connectLock(lock, false))) {  // getOperationLog needs no adminAuth
+    if (!(await this._connectLock(lock, false))) {
+      // getOperationLog needs no adminAuth
       return false;
     }
     try {
