@@ -604,11 +604,9 @@ class Manager extends EventEmitter {
           return false;
         }
         try {
-          // calibrateTimeCommand() only needs this.privateData.aesKey which is stored
-          // in the lock data since pairing — no macro_adminLogin() required.
-          // macro_adminLogin triggers checkAdminCommand which causes the TTLock to
-          // disconnect after connect(true) (skipDataRead), because the firmware expects
-          // the full connect(false) handshake before accepting admin-level commands.
+          // calibrateTimeCommand() only needs this.privateData.aesKey stored since pairing.
+          // _connectLock now uses connect(false) which does the full handshake and admin login,
+          // so the session is already authenticated when we reach this point.
           await withTimeout(lock.calibrateTimeCommand(), 10000, 'calibrateTimeCommand ' + address);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
           return true;
@@ -832,18 +830,17 @@ class Manager extends EventEmitter {
       if (lock.isConnected()) return true;
       try {
         console.log(`Connect attempt ${attempt}/3 to ${address}`);
-        // skipDataRead=true: skip searchDeviceFeatureCommand which disconnects this lock
-        const res = await withTimeout(lock.connect(true), 15000, 'connect ' + address);
+        // Use connect(false) — full handshake including searchDeviceFeatureCommand.
+        // This lock firmware requires searchDeviceFeatureCommand to complete before it
+        // will accept checkAdminCommand (macro_adminLogin). Using connect(true)/skipDataRead
+        // caused macro_adminLogin to ALWAYS disconnect the lock (100% failure rate).
+        const res = await withTimeout(lock.connect(false), 15000, 'connect ' + address);
         if (res) {
           console.log('Connected to', address);
-          // After connect(true), the SDK skips macro_adminLogin() in onConnected() because
-          // it only runs it when autoLockTime==-1 (first connect). Without admin login,
-          // checkUserTime (called by lock/unlock) causes the lock to disconnect immediately.
-          // Explicitly authenticate here so all subsequent commands work.
-          if (lock.featureList) {
-            // Small delay: after connect(true) the lock firmware needs a moment before
-            // it can reliably handle the first BLE command (checkAdminCommand).
-            // Without this, ~50% of macro_adminLogin calls disconnect mid-command.
+          // If the SDK's onConnected() didn't call macro_adminLogin (because autoLockTime
+          // was not -1), call it manually now. searchDeviceFeatureCommand has already run
+          // so checkAdminCommand will succeed.
+          if (!lock.adminAuth) {
             await sleep(300);
             const adminOk = await lock.macro_adminLogin().catch((e) => {
               console.warn('macro_adminLogin failed:', e.message);
@@ -851,7 +848,6 @@ class Manager extends EventEmitter {
             });
             if (!adminOk && !lock.isConnected()) {
               // Lock disconnected during admin login — treat as connect failure and retry.
-              // Returning true here would make callers invoke BLE commands on a dead session.
               console.warn('macro_adminLogin disconnected lock', address, '— retrying connect');
               if (attempt < 3) {
                 await sleep(5000);
@@ -861,7 +857,6 @@ class Manager extends EventEmitter {
               break;
             }
             if (!adminOk) {
-              // Admin login returned false but connection still alive — proceed optimistically.
               console.warn('macro_adminLogin returned false for', address, '— proceeding anyway');
             }
           }
