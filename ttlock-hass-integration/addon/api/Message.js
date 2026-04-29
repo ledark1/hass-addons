@@ -25,20 +25,18 @@ class Message {
    * @param {import('ws').Data} payload
    */
   constructor(payload) {
-    if (typeof payload != 'undefined') {
-      try {
-        const json = JSON.parse(payload);
-        if (typeof json.type != 'undefined') {
-          this.type = json.type;
-          if (typeof json.data != 'undefined') {
-            this.data = json.data;
-          }
-          this.valid = true;
+    if (payload === undefined) return;
+    try {
+      const json = JSON.parse(payload);
+      if (json.type !== undefined) {
+        this.type = json.type;
+        if (json.data !== undefined) {
+          this.data = json.data;
         }
-      } catch (error) {
-        console.error('Error parsing Message payload', error);
+        this.valid = true;
       }
-    } else {
+    } catch (error) {
+      console.error('Error parsing Message payload', error);
     }
   }
 

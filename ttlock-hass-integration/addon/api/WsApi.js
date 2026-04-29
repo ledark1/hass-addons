@@ -21,8 +21,8 @@ class WsApi {
   _send(json) {
     try {
       this.ws.send(json);
-    } catch (error) {
-      // Socket already closed — ignore
+    } catch (err) {
+      console.debug('_send: socket already closed', err.message);
     }
   }
 
@@ -41,7 +41,9 @@ class WsApi {
     for (let ws of wss.clients) {
       try {
         ws.send(message.toJSON());
-      } catch (_) {}
+      } catch (err) {
+        console.debug('sendStatus: client already closed', err.message);
+      }
     }
   }
 
@@ -56,7 +58,9 @@ class WsApi {
     for (let ws of wss.clients) {
       try {
         ws.send(message.toJSON());
-      } catch (_) {}
+      } catch (err) {
+        console.debug('sendLockStatus: client already closed', err.message);
+      }
     }
   }
 
@@ -162,7 +166,7 @@ class WsApi {
     const message = new Message();
     message.setType('config');
     message.setData({
-      set: typeof error != 'undefined' ? error : true
+      set: error === undefined ? true : error
     });
     this._send(message.toJSON());
   }
@@ -184,18 +188,18 @@ class WsApi {
     const newVisibleLocks = manager.getNewVisible();
     const pairedVisibleLocks = manager.getPairedVisible();
     let locks = [];
-    for (let [address, lock] of newVisibleLocks) {
+    for (let [, lock] of newVisibleLocks) {
       try {
         locks.push(await Lock.fromTTLock(lock));
-      } catch (error) {
-        // lock was not connected yet
+      } catch (err) {
+        console.debug('getLocks: lock not yet connected', err.message);
       }
     }
-    for (let [address, lock] of pairedVisibleLocks) {
+    for (let [, lock] of pairedVisibleLocks) {
       try {
         locks.push(await Lock.fromTTLock(lock));
-      } catch (error) {
-        // lock was not connected yet
+      } catch (err) {
+        console.debug('getLocks: lock not yet connected', err.message);
       }
     }
     return locks;
