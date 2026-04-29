@@ -1,8 +1,6 @@
-'use strict';
-
-const { AudioManage } = require('ttlock-sdk-js');
-const store = require('../src/store');
-const manager = require('../src/manager');
+import { AudioManage } from 'ttlock-sdk-js';
+import store from '../src/store.js';
+import manager from '../src/manager.js';
 
 class Lock {
   /** @type {string} MAC address */
@@ -41,8 +39,8 @@ class Lock {
   manufacturer;
 
   /**
-   * 
-   * @param {import('ttlock-sdk-js').TTLock} lockObject 
+   *
+   * @param {import('ttlock-sdk-js').TTLock} lockObject
    */
   static async fromTTLock(lockObject) {
     const lock = new Lock();
@@ -101,14 +99,14 @@ class Lock {
     // Fall back to the store's persisted copy, then to the live object.
     const deviceInfo = lockObject.deviceInfo || store.getDeviceInfo(lockObject.getAddress());
     const model = lockObject.getModel();
-    lock.model = (model && model !== "unknown") ? model : (deviceInfo?.modelNum || "");
+    lock.model = model && model !== 'unknown' ? model : deviceInfo?.modelNum || '';
     const firmware = lockObject.getFirmware();
-    lock.firmware = (firmware && firmware !== "unknown") ? firmware : (deviceInfo?.firmwareRevision || "");
+    lock.firmware = firmware && firmware !== 'unknown' ? firmware : deviceInfo?.firmwareRevision || '';
     const manufacturer = lockObject.getManufacturer();
-    lock.manufacturer = (manufacturer && manufacturer !== "unknown") ? manufacturer : "";
+    lock.manufacturer = manufacturer && manufacturer !== 'unknown' ? manufacturer : '';
 
     return lock;
   }
 }
 
-module.exports = Lock;
+export default Lock;

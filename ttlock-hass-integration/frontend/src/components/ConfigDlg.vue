@@ -24,8 +24,8 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn color="red-darken-4" variant="elevated" v-on:click="cancelConfig" :disabled="busy"> {{ $t('common.close') }} </v-btn>
-          <v-btn color="green-darken-4" variant="elevated" v-on:click="saveConfig" :disabled="busy || !configValid"> {{ $t('common.save') }} </v-btn>
+          <v-btn color="red-darken-4" variant="elevated" @click="cancelConfig" :disabled="busy"> {{ $t('common.close') }}</v-btn>
+          <v-btn color="green-darken-4" variant="elevated" @click="saveConfig" :disabled="busy || !configValid"> {{ $t('common.save') }}</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -53,22 +53,24 @@ export default {
     }
   },
   methods: {
-    validateJson(val) {
+    isValidJson(val) {
+      if (!val) return false
       try {
         JSON.parse(val)
-        this.configValid = true
-      } catch (e) {
-        this.configValid = false
+        return true
+      } catch {
+        return false
       }
     },
     async saveConfig() {
       if (this.busy || !this.configValid) return
+
+      this.busy = true
       try {
         const data = JSON.parse(this.configText)
-        this.busy = true
         await this.$store.dispatch("saveConfig", JSON.stringify(data))
-      } catch (e) {
-        this.configValid = false
+      } finally {
+        this.busy = false
       }
     },
     cancelConfig() {
@@ -85,13 +87,17 @@ export default {
       }
     },
     storeConfig(newVal) {
-      if (newVal != "") {
-        try {
-          this.configText = JSON.stringify(JSON.parse(newVal), null, 2)
-        } catch (e) {
-          this.configText = newVal
-        }
+      if (!newVal) return
+
+      try {
+        const parsed = JSON.parse(newVal)
+        this.configText = JSON.stringify(parsed, null, 2)
         this.configValid = true
+      } catch (e) {
+        console.error(e)
+        this.configText = newVal
+        this.configValid = false
+      } finally {
         this.busy = false
       }
     },

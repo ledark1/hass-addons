@@ -1,9 +1,7 @@
-'use strict';
-
-const mqtt = require('async-mqtt');
-const manager = require('./manager');
-const store = require('./store');
-const { LockedStatus } = require('ttlock-sdk-js');
+import mqtt from 'async-mqtt';
+import manager from './manager.js';
+import store from './store.js';
+import { LockedStatus } from 'ttlock-sdk-js';
 
 class HomeAssistant {
   /**
@@ -85,14 +83,13 @@ class HomeAssistant {
       const device = {
         identifiers: ['ttlock_' + id],
         'name': name,
-        'manufacturer': (rawManufacturer && rawManufacturer !== 'unknown') ? rawManufacturer : '',
-        'model': (rawModel && rawModel !== 'unknown') ? rawModel : (deviceInfo?.modelNum || ''),
-        'sw_version': (rawFirmware && rawFirmware !== 'unknown') ? rawFirmware : (deviceInfo?.firmwareRevision || '')
+        'manufacturer': rawManufacturer && rawManufacturer !== 'unknown' ? rawManufacturer : '',
+        'model': rawModel && rawModel !== 'unknown' ? rawModel : deviceInfo?.modelNum || '',
+        'sw_version': rawFirmware && rawFirmware !== 'unknown' ? rawFirmware : deviceInfo?.firmwareRevision || ''
       };
 
       // setup lock state
-      const configLockTopic = this.discovery_prefix + '/lock/' + id + '/lock/config';
-      const lockPayload = {
+      await this._publish(this.discovery_prefix + '/lock/' + id + '/lock/config', {
         unique_id: 'ttlock_' + id,
         name: name,
         device: device,
@@ -105,15 +102,10 @@ class HomeAssistant {
         value_template: '{{ value_json.state }}',
         optimistic: false,
         retain: false
-      };
-      if (process.env.MQTT_DEBUG == '1') {
-        console.log('MQTT Publish', configLockTopic, JSON.stringify(lockPayload));
-      }
-      let res = await this.client.publish(configLockTopic, JSON.stringify(lockPayload), { retain: true });
+      });
 
       // setup battery sensor
-      const configBatteryTopic = this.discovery_prefix + '/sensor/' + id + '/battery/config';
-      const batteryPayload = {
+      await this._publish(this.discovery_prefix + '/sensor/' + id + '/battery/config', {
         unique_id: 'ttlock_' + id + '_battery',
         name: name + ' Battery',
         device: device,
@@ -121,15 +113,10 @@ class HomeAssistant {
         unit_of_measurement: '%',
         state_topic: 'ttlock/' + id,
         value_template: '{{ value_json.battery }}'
-      };
-      if (process.env.MQTT_DEBUG == '1') {
-        console.log('MQTT Publish', configBatteryTopic, JSON.stringify(batteryPayload));
-      }
-      res = await this.client.publish(configBatteryTopic, JSON.stringify(batteryPayload), { retain: true });
+      });
 
       // setup rssi sensor
-      const configRssiTopic = this.discovery_prefix + '/sensor/' + id + '/rssi/config';
-      const rssiPayload = {
+      await this._publish(this.discovery_prefix + '/sensor/' + id + '/rssi/config', {
         unique_id: 'ttlock_' + id + '_rssi',
         name: name + ' RSSI',
         device: device,
@@ -137,14 +124,17 @@ class HomeAssistant {
         icon: 'mdi:signal',
         state_topic: 'ttlock/' + id,
         value_template: '{{ value_json.rssi }}'
-      };
-      if (process.env.MQTT_DEBUG == '1') {
-        console.log('MQTT Publish', configRssiTopic, JSON.stringify(rssiPayload));
-      }
-      res = await this.client.publish(configRssiTopic, JSON.stringify(rssiPayload), { retain: true });
+      });
 
       this.configuredLocks.add(lock.getAddress());
     }
+  }
+
+  async _publish(topic, payload) {
+    if (process.env.MQTT_DEBUG == '1') {
+      console.log('MQTT Publish', topic, JSON.stringify(payload));
+    }
+    await this.client.publish(topic, JSON.stringify(payload), { retain: true });
   }
 
   /**
@@ -271,4 +261,4 @@ class HomeAssistant {
   }
 }
 
-module.exports = HomeAssistant;
+export default HomeAssistant;

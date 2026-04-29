@@ -104,7 +104,7 @@ export default {
           endDate: "209912012359",
         }
       } else {
-        this.passcode = JSON.parse(JSON.stringify(passcode))
+        this.passcode = structuredClone(passcode)
         this.passcode.passCode = passcode.newPassCode || passcode.passCode || -1
         this.passcode.newPassCode = ""
         this.passcode.startDate = passcode.startDate || "200001010000"

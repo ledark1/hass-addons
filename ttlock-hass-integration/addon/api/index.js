@@ -1,13 +1,11 @@
-'use strict';
+import { sleep } from 'ttlock-sdk-js';
+import WebSocket from 'ws';
+import manager from '../src/manager.js';
+import store from '../src/store.js';
+import Message from './Message.js';
+import WsApi from './WsApi.js';
 
-const { sleep } = require('ttlock-sdk-js');
-const WebSocket = require('ws');
-const manager = require('../src/manager');
-const store = require('../src/store');
-const Message = require('./Message');
-const WsApi = require('./WsApi');
-
-module.exports = async (server) => {
+export default async (server) => {
   const wss = new WebSocket.Server({
     server: server,
     path: '/api'

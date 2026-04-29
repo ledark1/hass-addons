@@ -1,8 +1,6 @@
-'use strict';
-
-const EventEmitter = require('events');
-const store = require('./store');
-const { TTLockClient, AudioManage, LockedStatus, LogOperateCategory, LogOperateNames } = require('ttlock-sdk-js');
+import EventEmitter from 'node:events';
+import store from './store.js';
+import { TTLockClient, AudioManage, LockedStatus, LogOperateCategory, LogOperateNames } from 'ttlock-sdk-js';
 
 const ScanType = Object.freeze({
   NONE: 0,
@@ -185,8 +183,8 @@ class Manager extends EventEmitter {
     if (lock === undefined) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
-      let res = await lock.initLock();
-      if (res != false) {
+      const res = await lock.initLock();
+      if (res !== false) {
         this.pairedLocks.set(lock.getAddress(), lock);
         this.newLocks.delete(lock.getAddress());
         this._bindLockEvents(lock);
@@ -203,6 +201,19 @@ class Manager extends EventEmitter {
       return false;
     } finally {
       this._releaseConnect(address);
+    }
+  }
+
+  async _tryUnlock(lock, address, attempt) {
+    try {
+      const res = await withTimeout(lock.unlock(), 15000, 'unlock ' + address);
+      console.log('Unlock result for', address, ':', res);
+      if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      return { done: true, res };
+    } catch (error) {
+      console.error(`Unlock attempt ${attempt}/3 error:`, error.message);
+      if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      return { done: false };
     }
   }
 
@@ -224,25 +235,31 @@ class Manager extends EventEmitter {
           }
           return false;
         }
-        try {
-          const res = await withTimeout(lock.unlock(), 15000, 'unlock ' + address);
-          console.log('Unlock result for', address, ':', res);
-          if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          return res;
-        } catch (error) {
-          console.error(`Unlock attempt ${attempt}/3 error:`, error.message);
-          if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          if (attempt < 3) {
-            this._releaseMutex(address);
-            console.log('Waiting 5s before retry...');
-            await sleep(5000);
-          }
+        const { done, res } = await this._tryUnlock(lock, address, attempt);
+        if (done) return res;
+        if (attempt < 3) {
+          this._releaseMutex(address);
+          console.log('Waiting 5s before retry...');
+          await sleep(5000);
         }
       }
       console.log('All unlock attempts failed for', address);
       return false;
     } finally {
       this._releaseConnect(address);
+    }
+  }
+
+  async _tryLock(lock, address, attempt) {
+    try {
+      const res = await withTimeout(lock.lock(), 15000, 'lock ' + address);
+      console.log('Lock result for', address, ':', res);
+      if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      return { done: true, res };
+    } catch (error) {
+      console.error(`Lock attempt ${attempt}/3 error:`, error.message);
+      if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      return { done: false };
     }
   }
 
@@ -264,25 +281,32 @@ class Manager extends EventEmitter {
           }
           return false;
         }
-        try {
-          const res = await withTimeout(lock.lock(), 15000, 'lock ' + address);
-          console.log('Lock result for', address, ':', res);
-          if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          return res;
-        } catch (error) {
-          console.error(`Lock attempt ${attempt}/3 error:`, error.message);
-          if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          if (attempt < 3) {
-            this._releaseMutex(address);
-            console.log('Waiting 5s before retry...');
-            await sleep(5000);
-          }
+        const { done, res } = await this._tryLock(lock, address, attempt);
+        if (done) return res;
+        if (attempt < 3) {
+          this._releaseMutex(address);
+          console.log('Waiting 5s before retry...');
+          await sleep(5000);
         }
       }
       console.log('All lock attempts failed for', address);
       return false;
     } finally {
       this._releaseConnect(address);
+    }
+  }
+
+  async _trySetAutoLock(lock, address, value, attempt) {
+    try {
+      const res = await withTimeout(lock.setAutoLockTime(value), 15000, 'setAutoLock ' + address);
+      if (res !== false) this._cachedAutoLock.set(address, value);
+      this.emit('lockUpdated', lock);
+      if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      return { done: true, res };
+    } catch (error) {
+      console.error(`setAutoLock attempt ${attempt}/3 error:`, error.message);
+      if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      return { done: false };
     }
   }
 
@@ -298,19 +322,11 @@ class Manager extends EventEmitter {
           }
           return false;
         }
-        try {
-          const res = await withTimeout(lock.setAutoLockTime(value), 15000, 'setAutoLock ' + address);
-          if (res !== false) this._cachedAutoLock.set(address, value);
-          this.emit('lockUpdated', lock);
-          if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          return res;
-        } catch (error) {
-          console.error(`setAutoLock attempt ${attempt}/3 error:`, error.message);
-          if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          if (attempt < 3) {
-            this._releaseMutex(address);
-            await sleep(5000);
-          }
+        const { done, res } = await this._trySetAutoLock(lock, address, value, attempt);
+        if (done) return res;
+        if (attempt < 3) {
+          this._releaseMutex(address);
+          await sleep(5000);
         }
       }
       console.log('All setAutoLock attempts failed for', address);
@@ -556,6 +572,21 @@ class Manager extends EventEmitter {
     }
   }
 
+  async _trySetAudio(lock, address, audio, attempt) {
+    try {
+      const sound = audio ? AudioManage.TURN_ON : AudioManage.TURN_OFF;
+      const res = await withTimeout(lock.setLockSound(sound), 15000, 'setAudio ' + address);
+      if (res !== false) this._cachedAudio.set(address, audio);
+      this.emit('lockUpdated', lock);
+      if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      return { done: true, res };
+    } catch (error) {
+      console.error(`setAudio attempt ${attempt}/3 error:`, error.message);
+      if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      return { done: false };
+    }
+  }
+
   async setAudio(address, audio) {
     const lock = this.pairedLocks.get(address);
     if (!lock?.hasLockSound()) return false;
@@ -568,26 +599,40 @@ class Manager extends EventEmitter {
           }
           return false;
         }
-        try {
-          const sound = audio ? AudioManage.TURN_ON : AudioManage.TURN_OFF;
-          const res = await withTimeout(lock.setLockSound(sound), 15000, 'setAudio ' + address);
-          if (res !== false) this._cachedAudio.set(address, audio);
-          this.emit('lockUpdated', lock);
-          if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          return res;
-        } catch (error) {
-          console.error(`setAudio attempt ${attempt}/3 error:`, error.message);
-          if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          if (attempt < 3) {
-            this._releaseMutex(address);
-            await sleep(5000);
-          }
+        const { done, res } = await this._trySetAudio(lock, address, audio, attempt);
+        if (done) return res;
+        if (attempt < 3) {
+          this._releaseMutex(address);
+          await sleep(5000);
         }
       }
       console.log('All setAudio attempts failed for', address);
       return false;
     } finally {
       this._releaseConnect(address);
+    }
+  }
+
+  async _tryCalibrateTime(lock, address, attempt) {
+    try {
+      // calibrateTimeCommand() only needs this.privateData.aesKey stored since pairing.
+      // No adminAuth required — pass needsAdmin=false to avoid the checkAdminCommand
+      // round-trip that causes some lock firmware to disconnect.
+      await withTimeout(lock.calibrateTimeCommand(), 10000, 'calibrateTimeCommand ' + address);
+      if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      return { done: true, res: true };
+    } catch (error) {
+      console.error(`calibrateTime attempt ${attempt}/3 error:`, error.message);
+      if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      // "Failed setting lock time" = the lock explicitly rejected the command (FAILED
+      // response code). This is a known firmware limitation on some TTLock hardware
+      // (the SDK itself says "this seems to fail on some locks" and swallows the error
+      // during pairing). Retrying will not help — bail out immediately.
+      if (error.message === 'Failed setting lock time') {
+        console.log('calibrateTime: lock firmware does not support time calibration, giving up');
+        return { done: true, res: false };
+      }
+      return { done: false };
     }
   }
 
@@ -604,28 +649,11 @@ class Manager extends EventEmitter {
           }
           return false;
         }
-        try {
-          // calibrateTimeCommand() only needs this.privateData.aesKey stored since pairing.
-          // No adminAuth required — pass needsAdmin=false to avoid the checkAdminCommand
-          // round-trip that causes some lock firmware to disconnect.
-          await withTimeout(lock.calibrateTimeCommand(), 10000, 'calibrateTimeCommand ' + address);
-          if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          return true;
-        } catch (error) {
-          console.error(`calibrateTime attempt ${attempt}/3 error:`, error.message);
-          if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          // "Failed setting lock time" = the lock explicitly rejected the command (FAILED
-          // response code). This is a known firmware limitation on some TTLock hardware
-          // (the SDK itself says "this seems to fail on some locks" and swallows the error
-          // during pairing). Retrying will not help — bail out immediately.
-          if (error.message === 'Failed setting lock time') {
-            console.log('calibrateTime: lock firmware does not support time calibration, giving up');
-            return false;
-          }
-          if (attempt < 3) {
-            this._releaseMutex(address);
-            await sleep(5000);
-          }
+        const { done, res } = await this._tryCalibrateTime(lock, address, attempt);
+        if (done) return res;
+        if (attempt < 3) {
+          this._releaseMutex(address);
+          await sleep(5000);
         }
       }
       console.log('All calibrateTime attempts failed for', address);
@@ -635,13 +663,28 @@ class Manager extends EventEmitter {
     }
   }
 
+  async _tryGetAudio(lock, address, attempt) {
+    try {
+      const sound = await withTimeout(lock.getLockSound(true), 15000, 'getAudio ' + address);
+      const audio = sound === AudioManage.TURN_ON;
+      if (sound === AudioManage.TURN_ON || sound === AudioManage.TURN_OFF) {
+        this._cachedAudio.set(address, audio);
+      }
+      this.emit('lockUpdated', lock);
+      if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      return { done: true, res: audio };
+    } catch (error) {
+      console.error(`getAudio attempt ${attempt}/3 error:`, error.message);
+      if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      return { done: false };
+    }
+  }
+
   async getAudio(address) {
     const lock = this.pairedLocks.get(address);
     if (!lock?.hasLockSound()) return false;
     // Manager-level cache (populated by previous reads/writes) — no BLE, no mutex.
-    if (this._cachedAudio.has(address)) {
-      return this._cachedAudio.get(address);
-    }
+    if (this._cachedAudio.has(address)) return this._cachedAudio.get(address);
     // Cache empty: connect and read from lock (mutex held via _connectLock)
     try {
       for (let attempt = 1; attempt <= 3; attempt++) {
@@ -653,22 +696,11 @@ class Manager extends EventEmitter {
           }
           return false;
         }
-        try {
-          const sound = await withTimeout(lock.getLockSound(true), 15000, 'getAudio ' + address);
-          const audio = sound === AudioManage.TURN_ON;
-          if (sound === AudioManage.TURN_ON || sound === AudioManage.TURN_OFF) {
-            this._cachedAudio.set(address, audio);
-          }
-          this.emit('lockUpdated', lock);
-          if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          return audio;
-        } catch (error) {
-          console.error(`getAudio attempt ${attempt}/3 error:`, error.message);
-          if (lock.isConnected()) await lock.disconnect().catch(() => {});
-          if (attempt < 3) {
-            this._releaseMutex(address);
-            await sleep(5000);
-          }
+        const { done, res } = await this._tryGetAudio(lock, address, attempt);
+        if (done) return res;
+        if (attempt < 3) {
+          this._releaseMutex(address);
+          await sleep(5000);
         }
       }
       console.log('All getAudio attempts failed for', address);
@@ -678,11 +710,30 @@ class Manager extends EventEmitter {
     }
   }
 
+  _enrichOperation(operation) {
+    operation.recordTypeName = LogOperateNames[operation.recordType];
+    if (LogOperateCategory.LOCK.includes(operation.recordType)) {
+      operation.recordTypeCategory = 'LOCK';
+    } else if (LogOperateCategory.UNLOCK.includes(operation.recordType)) {
+      operation.recordTypeCategory = 'UNLOCK';
+    } else if (LogOperateCategory.FAILED.includes(operation.recordType)) {
+      operation.recordTypeCategory = 'FAILED';
+    } else {
+      operation.recordTypeCategory = 'OTHER';
+    }
+    if (operation.password !== undefined) {
+      if (LogOperateCategory.IC.includes(operation.recordType)) {
+        operation.passwordName = store.getCardAlias(operation.password);
+      } else if (LogOperateCategory.FR.includes(operation.recordType)) {
+        operation.passwordName = store.getFingerAlias(operation.password);
+      }
+    }
+    return operation;
+  }
+
   async getOperationLog(address, reload = false) {
     const lock = this.pairedLocks.get(address);
-    if (lock == undefined) {
-      return false;
-    }
+    if (lock === undefined) return false;
     if (!(await this._connectLock(lock, false))) {
       // getOperationLog needs no adminAuth
       return false;
@@ -691,34 +742,9 @@ class Manager extends EventEmitter {
       // Force the SDK's 0xffff fetch path (new events) so a manual refresh always pulls
       // fresh entries. Keep noCache=false so the cache is merged — passing noCache=true
       // makes the SDK re-fetch from sequence 0 (dozens of BLE round-trips, unreliable).
-      if (reload) {
-        lock.newEvents = true;
-      }
-      let operations = structuredClone(await lock.getOperationLog(true, false));
-      let validOperations = [];
-      for (let operation of operations) {
-        if (operation) {
-          operation.recordTypeName = LogOperateNames[operation.recordType];
-          if (LogOperateCategory.LOCK.includes(operation.recordType)) {
-            operation.recordTypeCategory = 'LOCK';
-          } else if (LogOperateCategory.UNLOCK.includes(operation.recordType)) {
-            operation.recordTypeCategory = 'UNLOCK';
-          } else if (LogOperateCategory.FAILED.includes(operation.recordType)) {
-            operation.recordTypeCategory = 'FAILED';
-          } else {
-            operation.recordTypeCategory = 'OTHER';
-          }
-          if (operation.password != undefined) {
-            if (LogOperateCategory.IC.includes(operation.recordType)) {
-              operation.passwordName = store.getCardAlias(operation.password);
-            } else if (LogOperateCategory.FR.includes(operation.recordType)) {
-              operation.passwordName = store.getFingerAlias(operation.password);
-            }
-          }
-          validOperations.push(operation);
-        }
-      }
-      return validOperations;
+      if (reload) lock.newEvents = true;
+      const operations = structuredClone(await lock.getOperationLog(true, false));
+      return operations.filter(Boolean).map((op) => this._enrichOperation(op));
     } catch (error) {
       console.error(error);
       return false;
@@ -758,7 +784,11 @@ class Manager extends EventEmitter {
     while (this._bleMutex.has(address)) {
       try {
         await this._bleMutex.get(address);
-      } catch (_) {}
+      } catch (err) {
+        // The promise stored in _bleMutex was rejected (e.g. the holder threw).
+        // Swallow the rejection — we just need to re-check if the mutex is free.
+        console.debug('_acquireMutex: mutex promise rejected, retrying', err);
+      }
     }
     let release;
     const promise = new Promise((r) => (release = r));
@@ -785,6 +815,94 @@ class Manager extends EventEmitter {
 
   getCachedAutoLock(address) {
     return this._cachedAutoLock.get(address);
+  }
+
+  /**
+   * Wait for an in-progress BLE connect to finish before attempting our own.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {string} address
+   * @returns {Promise<boolean>} true if already connected after waiting
+   */
+  async _waitForConnecting(lock, address) {
+    if (!lock.connecting) return false;
+    console.log('Connect in progress, waiting for', address);
+    let wait = 200; // 20s max
+    while (lock.connecting && wait > 0) {
+      await sleep(100);
+      wait--;
+    }
+    return lock.isConnected();
+  }
+
+  /**
+   * Run macro_adminLogin after a successful connect(false).
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {string} address
+   * @param {number} attempt current attempt number (1–3)
+   * @returns {Promise<'ok'|'retry'|'abort'>}
+   */
+  async _doAdminLogin(lock, address, attempt) {
+    await sleep(300);
+    const adminOk = await lock.macro_adminLogin().catch((e) => {
+      console.warn('macro_adminLogin failed:', e.message);
+      return false;
+    });
+    if (!adminOk && !lock.isConnected()) {
+      // Lock disconnected during admin login — treat as connect failure and retry.
+      console.warn('macro_adminLogin disconnected lock', address, '— retrying connect');
+      return attempt < 3 ? 'retry' : 'abort';
+    }
+    if (!adminOk) {
+      console.warn('macro_adminLogin returned false for', address, '— proceeding anyway');
+    }
+    return 'ok';
+  }
+
+  /**
+   * Perform one connect(false) attempt, including optional admin login.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   * @param {string} address
+   * @param {boolean} needsAdmin
+   * @param {number} attempt current attempt number (1–3)
+   * @returns {Promise<true|'retry'|false>}
+   */
+  async _connectAttempt(lock, address, needsAdmin, attempt) {
+    try {
+      console.log(`Connect attempt ${attempt}/3 to ${address}`);
+      // Use connect(false) — full handshake including searchDeviceFeatureCommand.
+      // This lock firmware requires searchDeviceFeatureCommand to complete before it
+      // will accept checkAdminCommand (macro_adminLogin). Using connect(true)/skipDataRead
+      // caused macro_adminLogin to ALWAYS disconnect the lock (100% failure rate).
+      const res = await withTimeout(lock.connect(false), 15000, 'connect ' + address);
+      if (!res) {
+        // The TTLock self-disconnects mid-handshake under load. After the SDK returns false
+        // the BLE stack may still be cleaning up — make sure it's idle before retrying.
+        if (lock.connecting) {
+          let wait = 30; // up to 3s
+          while (lock.connecting && wait > 0) {
+            await sleep(100);
+            wait--;
+          }
+        }
+        console.log(`Connect attempt ${attempt}/3 failed (returned false)`);
+        return false;
+      }
+      console.log('Connected to', address);
+      // If the SDK's onConnected() didn't call macro_adminLogin (because autoLockTime
+      // was not -1), and this operation requires admin auth, call it manually now.
+      // searchDeviceFeatureCommand has already run so checkAdminCommand will succeed.
+      // Operations like getOperationLog and calibrateTime do NOT need adminAuth and
+      // should pass needsAdmin=false to avoid the extra round-trip that can disconnect.
+      if (needsAdmin && !lock.adminAuth) {
+        const adminResult = await this._doAdminLogin(lock, address, attempt);
+        if (adminResult === 'retry') return 'retry';
+        if (adminResult === 'abort') return false;
+      }
+      return true;
+    } catch (error) {
+      console.error(`Connect attempt ${attempt}/3 error:`, error.message);
+      return false;
+    }
   }
 
   /**
@@ -821,68 +939,11 @@ class Manager extends EventEmitter {
       return false;
     }
     if (lock.isConnected()) return true;
-    // Wait for any in-progress connect to finish (avoids "Connect already in progress")
-    if (lock.connecting) {
-      console.log('Connect in progress, waiting for', address);
-      let wait = 200; // 20s max
-      while (lock.connecting && wait > 0) {
-        await sleep(100);
-        wait--;
-      }
-      if (lock.isConnected()) return true;
-    }
+    if (await this._waitForConnecting(lock, address)) return true;
     for (let attempt = 1; attempt <= 3; attempt++) {
       if (lock.isConnected()) return true;
-      try {
-        console.log(`Connect attempt ${attempt}/3 to ${address}`);
-        // Use connect(false) — full handshake including searchDeviceFeatureCommand.
-        // This lock firmware requires searchDeviceFeatureCommand to complete before it
-        // will accept checkAdminCommand (macro_adminLogin). Using connect(true)/skipDataRead
-        // caused macro_adminLogin to ALWAYS disconnect the lock (100% failure rate).
-        const res = await withTimeout(lock.connect(false), 15000, 'connect ' + address);
-        if (res) {
-          console.log('Connected to', address);
-          // If the SDK's onConnected() didn't call macro_adminLogin (because autoLockTime
-          // was not -1), and this operation requires admin auth, call it manually now.
-          // searchDeviceFeatureCommand has already run so checkAdminCommand will succeed.
-          // Operations like getOperationLog and calibrateTime do NOT need adminAuth and
-          // should pass needsAdmin=false to avoid the extra round-trip that can disconnect.
-          if (needsAdmin && !lock.adminAuth) {
-            await sleep(300);
-            const adminOk = await lock.macro_adminLogin().catch((e) => {
-              console.warn('macro_adminLogin failed:', e.message);
-              return false;
-            });
-            if (!adminOk && !lock.isConnected()) {
-              // Lock disconnected during admin login — treat as connect failure and retry.
-              console.warn('macro_adminLogin disconnected lock', address, '— retrying connect');
-              if (attempt < 3) {
-                await sleep(5000);
-                continue;
-              }
-              // All 3 attempts exhausted
-              break;
-            }
-            if (!adminOk) {
-              console.warn('macro_adminLogin returned false for', address, '— proceeding anyway');
-            }
-          }
-          return true;
-        }
-        // The TTLock self-disconnects mid-handshake under load. After the SDK returns false
-        // the BLE stack may still be cleaning up — make sure it's idle before retrying.
-        if (lock.connecting) {
-          let wait = 30; // up to 3s
-          while (lock.connecting && wait > 0) {
-            await sleep(100);
-            wait--;
-          }
-        }
-        console.log(`Connect attempt ${attempt}/3 failed (returned false)`);
-      } catch (error) {
-        console.error(`Connect attempt ${attempt}/3 error:`, error.message);
-      }
-      // 5s lets the lock re-advertise so the next connect lands on a fresh session.
+      const result = await this._connectAttempt(lock, address, needsAdmin, attempt);
+      if (result === true) return true;
       if (attempt < 3) await sleep(5000);
     }
     console.log('All connect attempts failed for', address);
@@ -968,81 +1029,90 @@ class Manager extends EventEmitter {
   }
 
   /**
+   * Handle the initial BLE connect for a newly-discovered paired lock (while monitoring).
+   * Adds to connectQueue, acquires mutex, connects(false), then processes or disconnects.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _connectPairedLockOnFound(lock) {
+    // Add to connectQueue BEFORE connecting so _onLockDisconnected sees it
+    // if the disconnect event fires during the connect attempt
+    this.connectQueue.set(lock.getAddress(), lock);
+    // Hold the per-lock BLE mutex during the initial connect so user-op connects
+    // don't race with us on the same BLE session.
+    const release = await this._acquireMutex(lock.getAddress());
+    try {
+      // connect(false) = full connect: reads firmware, features (autoLock, passCode, etc.)
+      // The lock may self-disconnect after searchDeviceFeatureCommand — handle both cases
+      const result = await lock.connect(false);
+      if (result === true) {
+        console.log('Successful connect attempt to paired lock', lock.getAddress());
+        this.connectQueue.delete(lock.getAddress());
+        if (lock.isConnected()) {
+          if (this.waitingForConnect.has(lock.getAddress())) {
+            // connect(false) may have left corrupted session (e.g. failed checkRandom)
+            // Force disconnect so _connectLock gets a fresh session via connect(true)
+            await lock.disconnect().catch(() => {});
+          } else {
+            // No user operation waiting: process log and disconnect normally
+            await this._processOperationLog(lock);
+            await lock.disconnect();
+          }
+        }
+        // else: lock self-disconnected after feature scan (normal TTLock behavior)
+        // _onLockDisconnected will restart monitor
+        // _onLockUpdated will read operation log on next advertisement change
+      } else {
+        console.log('Unsuccessful connect attempt to paired lock', lock.getAddress());
+        // lock stays in connectQueue for retry on next scan
+      }
+    } finally {
+      release();
+    }
+  }
+
+  /**
+   * Register and optionally connect a newly-seen paired lock.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _handlePairedLockDiscovered(lock) {
+    this._bindLockEvents(lock);
+    // add it to the list of known locks immediately to prevent infinite retry loop
+    this.pairedLocks.set(lock.getAddress(), lock);
+    console.log('Discovered paired lock:', lock.getAddress());
+    if (this.client.isMonitoring()) {
+      await sleep(1000); // wait for BLE stack to settle before connecting
+      await this._connectPairedLockOnFound(lock);
+    } else {
+      // add it to the connect queue for later
+      this.connectQueue.set(lock.getAddress(), lock);
+    }
+  }
+
+  /**
    *
    * @param {import('ttlock-sdk-js').TTLock} lock
    */
   async _onFoundLock(lock) {
     let listChanged = false;
     if (lock.isPaired()) {
-      // check if lock is known
       if (!this.pairedLocks.has(lock.getAddress())) {
-        this._bindLockEvents(lock);
-        // add it to the list of known locks immediately to prevent infinite retry loop
-        this.pairedLocks.set(lock.getAddress(), lock);
-        console.log('Discovered paired lock:', lock.getAddress());
-        if (this.client.isMonitoring()) {
-          await sleep(1000); // wait for BLE stack to settle before connecting
-          // Add to connectQueue BEFORE connecting so _onLockDisconnected sees it
-          // if the disconnect event fires during the connect attempt
-          this.connectQueue.set(lock.getAddress(), lock);
-          // Hold the per-lock BLE mutex during the initial connect so user-op connects
-          // don't race with us on the same BLE session.
-          const release = await this._acquireMutex(lock.getAddress());
-          let result = false;
-          try {
-            // connect(false) = full connect: reads firmware, features (autoLock, passCode, etc.)
-            // The lock may self-disconnect after searchDeviceFeatureCommand — handle both cases
-            result = await lock.connect(false);
-            if (result == true) {
-              console.log('Successful connect attempt to paired lock', lock.getAddress());
-              this.connectQueue.delete(lock.getAddress());
-              if (lock.isConnected()) {
-                if (this.waitingForConnect.has(lock.getAddress())) {
-                  // connect(false) may have left corrupted session (e.g. failed checkRandom)
-                  // Force disconnect so _connectLock gets a fresh session via connect(true)
-                  await lock.disconnect().catch(() => {});
-                } else {
-                  // No user operation waiting: process log and disconnect normally
-                  await this._processOperationLog(lock);
-                  await lock.disconnect();
-                }
-              }
-              // else: lock self-disconnected after feature scan (normal TTLock behavior)
-              // _onLockDisconnected will restart monitor
-              // _onLockUpdated will read operation log on next advertisement change
-            } else {
-              console.log('Unsuccessful connect attempt to paired lock', lock.getAddress());
-              // lock stays in connectQueue for retry on next scan
-            }
-          } finally {
-            release();
-          }
-        } else {
-          // add it to the connect queue
-          this.connectQueue.set(lock.getAddress(), lock);
-        }
+        await this._handlePairedLockDiscovered(lock);
         listChanged = true;
       }
-    } else if (!lock.isInitialized()) {
-      if (!this.newLocks.has(lock.getAddress())) {
-        // this._bindLockEvents(lock);
-        // check if lock is in pairing mode
-        // add it to the list of new locks, ready to be initialized
-        console.log('Discovered new lock:', lock.toJSON());
-        this.newLocks.set(lock.getAddress(), lock);
-        listChanged = true;
-        if (this.client.isScanning()) {
-          console.log('New lock found, stopping scan');
-          await this.stopScan();
-        }
-      }
-    } else {
+    } else if (lock.isInitialized()) {
       console.log('Discovered unknown lock:', lock.toJSON());
+    } else if (!this.newLocks.has(lock.getAddress())) {
+      // check if lock is in pairing mode
+      // add it to the list of new locks, ready to be initialized
+      console.log('Discovered new lock:', lock.toJSON());
+      this.newLocks.set(lock.getAddress(), lock);
+      listChanged = true;
+      if (this.client.isScanning()) {
+        console.log('New lock found, stopping scan');
+        await this.stopScan();
+      }
     }
-
-    if (listChanged) {
-      this.emit('lockListChanged');
-    }
+    if (listChanged) this.emit('lockListChanged');
   }
 
   async _onUpdatedLockData() {
@@ -1182,98 +1252,113 @@ class Manager extends EventEmitter {
   }
 
   /**
+   * Handle the newEvents branch of _onLockUpdated.
+   * Connects (skipDataRead=true), reads the operation log, then disconnects.
+   * Includes cooldown guard and deferred-reset timer to avoid BLE spam.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _handleNewEventsUpdate(lock) {
+    // The TTLock SDK emits paramsChanged.newEvents=true only on a false→true transition of
+    // lock.newEvents. If we set lock.newEvents=false ourselves the SDK will re-emit on the
+    // very next advertisement (false→true again) causing an infinite spam loop.
+    // Strategy: never set lock.newEvents=false here except after a failed connect where we
+    // genuinely want a retry on the next ad. For cooldown/busy paths we schedule a deferred
+    // reset so the retry happens after the cooldown expires rather than immediately.
+    const OPLOG_COOLDOWN_MS = 60 * 1000;
+    if (lock._lastOperationLogFetch && Date.now() - lock._lastOperationLogFetch < OPLOG_COOLDOWN_MS) {
+      // Still within cooldown — don't reconnect, don't touch lock.newEvents (avoid spam loop).
+      // Schedule a one-shot reset so we retry once the cooldown expires.
+      if (!lock._newEventsResetTimer) {
+        const remaining = OPLOG_COOLDOWN_MS - (Date.now() - lock._lastOperationLogFetch);
+        lock._newEventsResetTimer = setTimeout(() => {
+          lock._newEventsResetTimer = null;
+          lock.newEvents = false; // triggers re-emit on next advertisement → retry
+        }, remaining);
+      }
+      return;
+    }
+    // If lock is already connected / busy: do nothing. The ongoing operation will call
+    // _processOperationLog or disconnect, which sets lock._lastOperationLogFetch and the
+    // normal cooldown path will take over. Don't touch lock.newEvents here (avoids spam).
+    if (lock.isConnected() || lock._processingOperationLog || this.waitingForConnect.has(lock.getAddress())) return;
+    // Cancel any pending deferred reset — we are about to process now
+    if (lock._newEventsResetTimer) {
+      clearTimeout(lock._newEventsResetTimer);
+      lock._newEventsResetTimer = null;
+    }
+    // Hold the BLE mutex during this background read so we don't race with user ops.
+    const release = await this._acquireMutex(lock.getAddress());
+    let weConnected = false;
+    try {
+      const result = await lock.connect(true); // skipDataRead=true
+      if (!result) {
+        lock.newEvents = false; // connect failed — allow retry on next advertisement
+        return;
+      }
+      weConnected = true;
+      await this._processOperationLog(lock);
+    } catch (error) {
+      // lock.connect() can throw "NobleDevice is not connected" if BLE disconnects
+      // during readBasicInfo(). Swallow it here — _onLockUpdated is called via EventEmitter
+      // and has no awaiter, so any unhandled rejection becomes an uncaughtException.
+      console.error('_onLockUpdated connect/process error:', error.message);
+      lock.newEvents = false; // connect failed — allow retry on next advertisement
+    } finally {
+      // Disconnect inside the mutex so the next user op gets a clean session.
+      if (weConnected && lock.isConnected()) {
+        await lock.disconnect().catch(() => {});
+      }
+      release();
+    }
+  }
+
+  /**
+   * Handle the lockedStatus branch of _onLockUpdated.
+   * Emits lockLock/lockUnlock based on current or cached lock status.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _handleLockedStatusUpdate(lock) {
+    // Only call getLockStatus() if already connected (it may try to connect otherwise).
+    // When not connected, rely on the cached status from the advertisement.
+    if (lock.isConnected()) {
+      const status = await lock.getLockStatus();
+      if (status == LockedStatus.LOCKED) {
+        console.log('>>>>>> Lock is now locked from new event <<<<<<');
+        this.emit('lockLock', lock);
+      } else if (status == LockedStatus.UNLOCKED) {
+        console.log('>>>>>> Lock is now unlocked from new event <<<<<<');
+        this.emit('lockUnlock', lock);
+      }
+    } else {
+      // Use cached status from BLE advertisement (no connection needed)
+      const status = lock.getLockStatus();
+      if (status == LockedStatus.LOCKED) {
+        console.log('>>>>>> Lock is now locked from advertisement <<<<<<');
+        this.emit('lockLock', lock);
+      } else if (status == LockedStatus.UNLOCKED) {
+        console.log('>>>>>> Lock is now unlocked from advertisement <<<<<<');
+        this.emit('lockUnlock', lock);
+      }
+    }
+  }
+
+  /**
    *
    * @param {import('ttlock-sdk-js').TTLock} lock
    */
   async _onLockUpdated(lock, paramsChanged) {
     console.log('lockUpdated', paramsChanged);
-
-    // if lock has new operations read the operations and send updates
-    if (paramsChanged.newEvents == true && lock.hasNewEvents()) {
-      // The TTLock SDK emits paramsChanged.newEvents=true only on a false→true transition of
-      // lock.newEvents. If we set lock.newEvents=false ourselves the SDK will re-emit on the
-      // very next advertisement (false→true again) causing an infinite spam loop.
-      // Strategy: never set lock.newEvents=false here except after a failed connect where we
-      // genuinely want a retry on the next ad. For cooldown/busy paths we schedule a deferred
-      // reset so the retry happens after the cooldown expires rather than immediately.
-      const OPLOG_COOLDOWN_MS = 60 * 1000;
-      if (lock._lastOperationLogFetch && Date.now() - lock._lastOperationLogFetch < OPLOG_COOLDOWN_MS) {
-        // Still within cooldown — don't reconnect, don't touch lock.newEvents (avoid spam loop).
-        // Schedule a one-shot reset so we retry once the cooldown expires.
-        if (!lock._newEventsResetTimer) {
-          const remaining = OPLOG_COOLDOWN_MS - (Date.now() - lock._lastOperationLogFetch);
-          lock._newEventsResetTimer = setTimeout(() => {
-            lock._newEventsResetTimer = null;
-            lock.newEvents = false; // triggers re-emit on next advertisement → retry
-          }, remaining);
-        }
-        return;
-      }
-      if (!lock.isConnected() && !lock._processingOperationLog && !this.waitingForConnect.has(lock.getAddress())) {
-        // Cancel any pending deferred reset — we are about to process now
-        if (lock._newEventsResetTimer) {
-          clearTimeout(lock._newEventsResetTimer);
-          lock._newEventsResetTimer = null;
-        }
-        // Hold the BLE mutex during this background read so we don't race with user ops.
-        const release = await this._acquireMutex(lock.getAddress());
-        let weConnected = false;
-        try {
-          const result = await lock.connect(true); // skipDataRead=true
-          if (!result) {
-            lock.newEvents = false; // connect failed — allow retry on next advertisement
-            return;
-          }
-          weConnected = true;
-          await this._processOperationLog(lock);
-        } catch (error) {
-          // lock.connect() can throw "NobleDevice is not connected" if BLE disconnects
-          // during readBasicInfo(). Swallow it here — _onLockUpdated is called via EventEmitter
-          // and has no awaiter, so any unhandled rejection becomes an uncaughtException.
-          console.error('_onLockUpdated connect/process error:', error.message);
-          lock.newEvents = false; // connect failed — allow retry on next advertisement
-        } finally {
-          // Disconnect inside the mutex so the next user op gets a clean session.
-          if (weConnected && lock.isConnected()) {
-            await lock.disconnect().catch(() => {});
-          }
-          release();
-        }
-      }
-      // If lock is already connected / busy: do nothing. The ongoing operation will call
-      // _processOperationLog or disconnect, which sets lock._lastOperationLogFetch and the
-      // normal cooldown path will take over. Don't touch lock.newEvents here (avoids spam).
+    if (paramsChanged.newEvents === true && lock.hasNewEvents()) {
+      await this._handleNewEventsUpdate(lock);
     }
-    if (paramsChanged.lockedStatus == true) {
-      // paramsChanged.lockedStatus means the BLE advertisement contains a status update.
-      // Only call getLockStatus() if already connected (it may try to connect otherwise).
-      // When not connected, rely on the cached status from the advertisement.
-      if (lock.isConnected()) {
-        const status = await lock.getLockStatus();
-        if (status == LockedStatus.LOCKED) {
-          console.log('>>>>>> Lock is now locked from new event <<<<<<');
-          this.emit('lockLock', lock);
-        } else if (status == LockedStatus.UNLOCKED) {
-          console.log('>>>>>> Lock is now unlocked from new event <<<<<<');
-          this.emit('lockUnlock', lock);
-        }
-      } else {
-        // Use cached status from BLE advertisement (no connection needed)
-        const status = lock.getLockStatus();
-        if (status == LockedStatus.LOCKED) {
-          console.log('>>>>>> Lock is now locked from advertisement <<<<<<');
-          this.emit('lockLock', lock);
-        } else if (status == LockedStatus.UNLOCKED) {
-          console.log('>>>>>> Lock is now unlocked from advertisement <<<<<<');
-          this.emit('lockUnlock', lock);
-        }
-      }
+    if (paramsChanged.lockedStatus === true) {
+      await this._handleLockedStatusUpdate(lock);
     }
-    if (paramsChanged.batteryCapacity == true) {
+    if (paramsChanged.batteryCapacity === true) {
       this.emit('lockUpdated', lock);
       this.emit('lockBatteryUpdated', lock);
     }
-    // Connect/disconnect for the newEvents branch is now handled inside the mutex above.
+    // Connect/disconnect for the newEvents branch is handled inside _handleNewEventsUpdate.
   }
 
   async _processOperationLog(lock) {
@@ -1331,4 +1416,4 @@ class Manager extends EventEmitter {
 
 const manager = new Manager();
 
-module.exports = manager;
+export default manager;

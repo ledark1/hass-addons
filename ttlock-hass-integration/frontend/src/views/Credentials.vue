@@ -30,11 +30,11 @@
       <v-table v-else density="compact">
         <thead>
           <tr>
-            <th class="text-left">{{ $t('credentials.type') }}</th>
-            <th class="text-left">{{ $t('credentials.pinCode') }}</th>
-            <th class="text-left">{{ $t('credentials.validFrom') }}</th>
-            <th class="text-left">{{ $t('credentials.validTo') }}</th>
-            <th class="text-right">{{ $t('common.actions') }}</th>
+            <th scope='col' class="text-left">{{ $t('credentials.type') }}</th>
+            <th scope='col' class="text-left">{{ $t('credentials.pinCode') }}</th>
+            <th scope='col' class="text-left">{{ $t('credentials.validFrom') }}</th>
+            <th scope='col' class="text-left">{{ $t('credentials.validTo') }}</th>
+            <th scope='col' class="text-right">{{ $t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -80,10 +80,10 @@
       <v-table v-else density="compact">
         <thead>
           <tr>
-            <th class="text-left">{{ $t('credentials.cardSn') }}</th>
-            <th class="text-left">{{ $t('credentials.validFrom') }}</th>
-            <th class="text-left">{{ $t('credentials.validTo') }}</th>
-            <th class="text-right">{{ $t('common.actions') }}</th>
+            <th scope='col' class="text-left">{{ $t('credentials.cardSn') }}</th>
+            <th scope='col' class="text-left">{{ $t('credentials.validFrom') }}</th>
+            <th scope='col' class="text-left">{{ $t('credentials.validTo') }}</th>
+            <th scope='col' class="text-right">{{ $t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -131,10 +131,10 @@
       <v-table v-else density="compact">
         <thead>
           <tr>
-            <th class="text-left">{{ $t('credentials.fingerprintId') }}</th>
-            <th class="text-left">{{ $t('credentials.validFrom') }}</th>
-            <th class="text-left">{{ $t('credentials.validTo') }}</th>
-            <th class="text-right">{{ $t('common.actions') }}</th>
+            <th scope='col' class="text-left">{{ $t('credentials.fingerprintId') }}</th>
+            <th scope='col' class="text-left">{{ $t('credentials.validFrom') }}</th>
+            <th scope='col' class="text-left">{{ $t('credentials.validTo') }}</th>
+            <th scope='col' class="text-right">{{ $t('common.actions') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -161,7 +161,6 @@
         </tbody>
       </v-table>
     </v-card>
-
     <Passcode :address="address" :value="editPasscode" :show="showEditPasscode" v-on:cancel="cancelEditPasscodeDialog" />
     <Card :address="address" :value="editCard" :show="showEditCard" v-on:cancel="cancelEditCardDialog" />
     <Finger :address="address" :value="editFinger" :show="showEditFinger" v-on:cancel="cancelEditFingerDialog" />
@@ -211,11 +210,11 @@ export default {
     },
   },
   created() {
-    if (!this.lock.name) {
-      this.$router.push({ name: "Home" })
-    } else {
+    if (this.lock.name) {
       this.$store.commit("setActiveLockAddress", this.lock.address)
       this.$store.dispatch("readCredentials", this.lock.address)
+    } else {
+      this.$router.push({ name: "Home" })
     }
   },
   beforeUnmount() {

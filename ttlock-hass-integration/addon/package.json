@@ -3,6 +3,7 @@
   "version": "0.2.5",
   "description": "Integration of the offline TTLock sdk into Home Assistant",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node ./index.js",
     "test": "echo \"Error: no test specified\" && exit 1"

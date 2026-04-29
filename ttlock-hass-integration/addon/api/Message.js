@@ -1,5 +1,3 @@
-'use strict';
-
 /**
  * @typedef {'status'|'scan'|'pair'|'lock'|'unlock'|'lockStatus'
  * |'credentials'|'passcode'|'card'|'finger'|'error'|'config'
@@ -23,25 +21,24 @@ class Message {
   valid = false;
 
   /**
-   * 
-   * @param {import('ws').Data} payload 
+   *
+   * @param {import('ws').Data} payload
    */
   constructor(payload) {
-    if (typeof payload != "undefined") {
+    if (typeof payload != 'undefined') {
       try {
         const json = JSON.parse(payload);
-        if (typeof json.type != "undefined") {
+        if (typeof json.type != 'undefined') {
           this.type = json.type;
-          if (typeof json.data != "undefined") {
+          if (typeof json.data != 'undefined') {
             this.data = json.data;
           }
           this.valid = true;
         }
       } catch (error) {
-        console.error("Error parsing Message payload", error);
+        console.error('Error parsing Message payload', error);
       }
     } else {
-      
     }
   }
 
@@ -50,8 +47,8 @@ class Message {
   }
 
   /**
-   * 
-   * @param {MessageType} type 
+   *
+   * @param {MessageType} type
    */
   setType(type) {
     this.type = type;
@@ -73,10 +70,10 @@ class Message {
     const obj = {
       type: this.type,
       data: this.data
-    }
+    };
 
     return JSON.stringify(obj);
   }
 }
 
-module.exports = Message;
+export default Message;

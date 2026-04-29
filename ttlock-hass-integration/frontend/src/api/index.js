@@ -11,21 +11,21 @@ class Api {
 
   constructor(store, url) {
     this.store = store;
-    if (typeof url != 'undefined') {
-      this.url = url;
-    } else {
-      let path = window.location.href.replace('http', 'ws').replace(window.location.hash, '').replace('/frontend/', '/api');
+    if (url === undefined) {
+      let path = globalThis.location.href.replace('http', 'ws').replace(globalThis.location.hash, '').replace('/frontend/', '/api');
       // local development (addon has to be started also)
-      if (path.substr(path.length - 4, 4) != '/api') {
+      if (!path.endsWith('/api')) {
         path += 'api';
       }
       console.log('Discovered WS API path', path);
       this.url = path;
+    } else {
+      this.url = url;
     }
   }
 
   async connect() {
-    if (typeof this.ws == 'undefined') {
+    if (this.ws === undefined) {
       this.ws = new ReconnectingWebSocket(this.url, [], {
         startClosed: true
       });
@@ -212,76 +212,118 @@ class Api {
     try {
       const message = JSON.parse(messageEvent.data);
       if (message.type) {
-        switch (message.type) {
-          case 'status':
-            if (message.data) {
-              const data = message.data;
-              if (typeof data.startup != 'undefined') {
-                this.store.commit('setStartupStatus', data.startup);
-              }
-              if (typeof data.scan != 'undefined') {
-                this.store.commit('setScanStatus', data.scan);
-              }
-              if (typeof data.locks != 'undefined') {
-                this.store.commit('setLocks', data.locks);
-              }
-            }
-            break;
-          case 'lockStatus':
-            if (message.data) {
-              this.store.commit('setLock', message.data);
-            }
-            break;
-          case 'autolock':
-            this.store.commit('setWaitingAutoLock', false);
-            break;
-          case 'credentials':
-            if (message.data) {
-              const data = message.data;
-              if (typeof data.address != 'undefined') {
-                this.store.commit('setCredentials', data);
-              }
-            }
-            break;
-          case 'cardScan':
-            this.store.commit('setWaitingCardScan');
-            break;
-          case 'fingerScan':
-            this.store.commit('setWaitingFingerScan');
-            break;
-          case 'fingerScanProgress':
-            this.store.commit('setFingerScanProgress');
-            break;
-          case 'settings':
-            this.store.commit('setWaitingSettings', false);
-            if (this.store.state.waitingCalibrate) {
-              this.store.commit('setCalibrateSuccess', message.data?.settings?.calibrate === true);
-            }
-            this.store.commit('setWaitingCalibrate', false);
-            break;
-          case 'error':
-            this.store.commit('setError', message.data);
-            break;
-          case 'config':
-            if (typeof message.data.config != 'undefined') {
-              this.store.commit('setConfig', message.data.config);
-            } else {
-              this.store.commit('setWaitingConfig', false);
-              if (message.data.set !== true) {
-                this.store.commit('setError', message.data.set);
-              }
-            }
-            break;
-          case 'operations':
-            const data = message?.data;
-            if (data?.address !== undefined && data?.operations !== undefined) {
-              this.store.commit('setOperations', data);
-            }
-            break;
-        }
+        this._handleMessage(message);
       }
     } catch (error) {
       console.error(error);
+    }
+  }
+
+  _handleMessage(message) {
+    switch (message.type) {
+      case 'status':
+        this._onStatus(message.data);
+        break;
+      case 'lockStatus':
+        this._onLockStatus(message.data);
+        break;
+      case 'autolock':
+        this._onAutolock();
+        break;
+      case 'credentials':
+        this._onCredentials(message.data);
+        break;
+      case 'cardScan':
+        this._onCardScan();
+        break;
+      case 'fingerScan':
+        this._onFingerScan();
+        break;
+      case 'fingerScanProgress':
+        this._onFingerScanProgress();
+        break;
+      case 'settings':
+        this._onSettings(message.data);
+        break;
+      case 'error':
+        this._onError(message.data);
+        break;
+      case 'config':
+        this._onConfig(message.data);
+        break;
+      case 'operations':
+        this._onOperations(message.data);
+        break;
+    }
+  }
+
+  _onStatus(data) {
+    if (!data) return;
+    if (data.startup !== undefined) {
+      this.store.commit('setStartupStatus', data.startup);
+    }
+    if (data.scan !== undefined) {
+      this.store.commit('setScanStatus', data.scan);
+    }
+    if (data.locks !== undefined) {
+      this.store.commit('setLocks', data.locks);
+    }
+  }
+
+  _onLockStatus(data) {
+    if (data) {
+      this.store.commit('setLock', data);
+    }
+  }
+
+  _onAutolock() {
+    this.store.commit('setWaitingAutoLock', false);
+  }
+
+  _onCredentials(data) {
+    if (data?.address !== undefined) {
+      this.store.commit('setCredentials', data);
+    }
+  }
+
+  _onCardScan() {
+    this.store.commit('setWaitingCardScan');
+  }
+
+  _onFingerScan() {
+    this.store.commit('setWaitingFingerScan');
+  }
+
+  _onFingerScanProgress() {
+    this.store.commit('setFingerScanProgress');
+  }
+
+  _onSettings(data) {
+    this.store.commit('setWaitingSettings', false);
+    if (this.store.state.waitingCalibrate) {
+      this.store.commit('setCalibrateSuccess', data?.settings?.calibrate === true);
+    }
+    this.store.commit('setWaitingCalibrate', false);
+  }
+
+  _onError(data) {
+    this.store.commit('setError', data);
+  }
+
+  _onConfig(data) {
+    if (data.config === undefined) {
+      this.store.commit('setWaitingConfig', false);
+      if (data.set !== true) {
+        this.store.commit('setError', data.set);
+      }
+    } else {
+      this.store.commit('setConfig', data.config);
+    }
+  }
+
+  _onOperations(data) {
+    if (data?.address !== undefined && data?.operations !== undefined) {
+      this.store.commit('setOperations', data);
     }
   }
 }

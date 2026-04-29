@@ -82,7 +82,7 @@ export default {
       ]
     },
     sortedOperations() {
-      let sorted = JSON.parse(JSON.stringify(this.operations));
+      let sorted = structuredClone(this.operations);
       sorted.sort((a, b) => {
         if (a.operateDate > b.operateDate) {
           return -1;

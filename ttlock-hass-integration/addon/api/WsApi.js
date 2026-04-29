@@ -1,11 +1,9 @@
-'use strict';
-
-const WebSocket = require('ws');
-const manager = require('../src/manager');
-const store = require('../src/store');
-const Lock = require('./Lock');
-const Message = require('./Message');
-const { sleep } = require('ttlock-sdk-js');
+import WebSocket from 'ws';
+import manager from '../src/manager.js';
+import store from '../src/store.js';
+import Lock from './Lock.js';
+import Message from './Message.js';
+import { sleep } from 'ttlock-sdk-js';
 
 class WsApi {
   /**
@@ -205,7 +203,9 @@ class WsApi {
 
   static async _devLocks() {
     await sleep(1000);
-    return JSON.parse('[{"address":"E1:58:1B:3A:60:5E","rssi":-73,"battery":63,"name":"S202F_5e603a","paired":true,"connected":true,"locked":0,"autoLockTime":5,"hasAutoLock":true,"hasSound":true,"audio":true,"manufacturer":"SCIENER","model":"S202F","firmware":"V3.3.8.2"}]');
+    return JSON.parse(
+      '[{"address":"E1:58:1B:3A:60:5E","rssi":-73,"battery":63,"name":"S202F_5e603a","paired":true,"connected":true,"locked":0,"autoLockTime":5,"hasAutoLock":true,"hasSound":true,"audio":true,"manufacturer":"SCIENER","model":"S202F","firmware":"V3.3.8.2"}]'
+    );
   }
 
   static async _devSendCredentials(ws) {
@@ -216,4 +216,4 @@ class WsApi {
   }
 }
 
-module.exports = WsApi;
+export default WsApi;

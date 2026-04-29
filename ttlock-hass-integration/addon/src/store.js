@@ -1,19 +1,11 @@
-'use strict';
-
-const fs = require('fs').promises;
+import { promises as fs } from 'node:fs';
 
 class Store {
-  constructor() {
-    this.settingsPath = '/data';
-    this.lockData = [];
-    this.aliasData = {
-      lock: {},
-      card: {},
-      finger: {}
-    };
-    /** @type {Object.<string, {firmwareRevision?: string, modelNum?: string, hardwareRevision?: string, factoryDate?: string}>} */
-    this.deviceInfoData = {};
-  }
+  settingsPath = '/data';
+  lockData = [];
+  aliasData = { lock: {}, card: {}, finger: {} };
+  /** @type {Object.<string, {firmwareRevision?: string, modelNum?: string, hardwareRevision?: string, factoryDate?: string}>} */
+  deviceInfoData = {};
 
   setDataPath(path) {
     this.settingsPath = path;
@@ -38,26 +30,18 @@ class Store {
   }
 
   getLockAlias(address, defaultValue = false) {
-    if (typeof this.aliasData.lock[address] != 'undefined') {
-      return this.aliasData.lock[address];
-    } else {
-      return defaultValue;
-    }
+    return Object.hasOwn(this.aliasData.lock, address) ? this.aliasData.lock[address] : defaultValue;
   }
 
   setCardAlias(card, alias) {
-    if (typeof alias != 'undefined' && alias != '') {
+    if (alias !== undefined && alias !== '') {
       this.aliasData.card[card] = alias;
       this.saveData();
     }
   }
 
   getCardAlias(card) {
-    if (typeof this.aliasData.card[card] != 'undefined') {
-      return this.aliasData.card[card];
-    } else {
-      return card;
-    }
+    return Object.hasOwn(this.aliasData.card, card) ? this.aliasData.card[card] : card;
   }
 
   deleteCardAlias(card) {
@@ -71,11 +55,7 @@ class Store {
   }
 
   getFingerAlias(finger) {
-    if (typeof this.aliasData.finger[finger] != 'undefined') {
-      return this.aliasData.finger[finger];
-    } else {
-      return finger;
-    }
+    return Object.hasOwn(this.aliasData.finger, finger) ? this.aliasData.finger[finger] : finger;
   }
 
   deleteFingerAlias(finger) {
@@ -172,4 +152,4 @@ class Store {
 
 const store = new Store();
 
-module.exports = store;
+export default store;

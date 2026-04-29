@@ -196,7 +196,7 @@ export default {
           alias: ""
         }
       } else {
-        this.finger = JSON.parse(JSON.stringify(finger))
+        this.finger = structuredClone(finger)
       }
     },
     async saveFinger() {
