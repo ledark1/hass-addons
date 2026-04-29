@@ -229,8 +229,8 @@ class Manager extends EventEmitter {
         if (!(await this._connectLock(lock))) {
           console.log(`Unlock: connect failed on attempt ${attempt}/3 for`, address);
           if (attempt < 3) {
-            console.log('Waiting 5s before retry...');
-            await sleep(5000);
+            console.log(`Waiting ${attempt * 1.5}s before retry...`);
+            await sleep(attempt * 1500);
             continue;
           }
           return false;
@@ -239,8 +239,8 @@ class Manager extends EventEmitter {
         if (done) return res;
         if (attempt < 3) {
           this._releaseMutex(address);
-          console.log('Waiting 5s before retry...');
-          await sleep(5000);
+          console.log(`Waiting ${attempt * 1.5}s before retry...`);
+          await sleep(attempt * 1500);
         }
       }
       console.log('All unlock attempts failed for', address);
@@ -275,8 +275,8 @@ class Manager extends EventEmitter {
         if (!(await this._connectLock(lock))) {
           console.log(`Lock: connect failed on attempt ${attempt}/3 for`, address);
           if (attempt < 3) {
-            console.log('Waiting 5s before retry...');
-            await sleep(5000);
+            console.log(`Waiting ${attempt * 1.5}s before retry...`);
+            await sleep(attempt * 1500);
             continue;
           }
           return false;
@@ -285,8 +285,8 @@ class Manager extends EventEmitter {
         if (done) return res;
         if (attempt < 3) {
           this._releaseMutex(address);
-          console.log('Waiting 5s before retry...');
-          await sleep(5000);
+          console.log(`Waiting ${attempt * 1.5}s before retry...`);
+          await sleep(attempt * 1500);
         }
       }
       console.log('All lock attempts failed for', address);
@@ -906,6 +906,22 @@ class Manager extends EventEmitter {
   }
 
   /**
+   * Stop the BLE scan and wait up to 3 s for it to settle.
+   * @returns {Promise<boolean>} true if scan stopped, false if it timed out.
+   */
+  async _stopScanForOp() {
+    console.log('Stopping BLE scan for user op');
+    await this.stopScan();
+    let wait = 30;
+    while (this.scanning && wait-- > 0) await sleep(100);
+    if (this.scanning) {
+      console.warn('BLE scan did not stop in time');
+      return false;
+    }
+    return true;
+  }
+
+  /**
    * @param {import('ttlock-sdk-js').TTLock} lock
    * @param {boolean} [needsAdmin=true] - Whether this operation requires macro_adminLogin.
    *   Pass false for read-only operations (getOperationLog, calibrateTime) that work
@@ -934,9 +950,11 @@ class Manager extends EventEmitter {
     this._mutexReleases.set(address, release);
     this.waitingForConnect.add(address);
     if (this.scanning) {
-      this.waitingForConnect.delete(address);
-      this._releaseMutex(address);
-      return false;
+      if (!(await this._stopScanForOp())) {
+        this.waitingForConnect.delete(address);
+        this._releaseMutex(address);
+        return false;
+      }
     }
     if (lock.isConnected()) return true;
     if (await this._waitForConnecting(lock, address)) return true;
@@ -944,7 +962,8 @@ class Manager extends EventEmitter {
       if (lock.isConnected()) return true;
       const result = await this._connectAttempt(lock, address, needsAdmin, attempt);
       if (result === true) return true;
-      if (attempt < 3) await sleep(5000);
+      // Exponential-ish back-off: 1.5 s then 3 s (vs former flat 5 s).
+      if (attempt < 3) await sleep(attempt * 1500);
     }
     console.log('All connect attempts failed for', address);
     this.waitingForConnect.delete(address);
