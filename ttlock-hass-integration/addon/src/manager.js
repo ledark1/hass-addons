@@ -596,7 +596,7 @@ class Manager extends EventEmitter {
     if (lock === undefined) return false;
     try {
       for (let attempt = 1; attempt <= 3; attempt++) {
-        if (!(await this._connectLock(lock))) {
+        if (!(await this._connectLock(lock, false))) {  // calibrateTimeCommand needs no adminAuth
           if (attempt < 3) {
             await sleep(5000);
             continue;
@@ -605,8 +605,8 @@ class Manager extends EventEmitter {
         }
         try {
           // calibrateTimeCommand() only needs this.privateData.aesKey stored since pairing.
-          // _connectLock now uses connect(false) which does the full handshake and admin login,
-          // so the session is already authenticated when we reach this point.
+          // No adminAuth required — pass needsAdmin=false to avoid the checkAdminCommand
+          // round-trip that causes some lock firmware to disconnect.
           await withTimeout(lock.calibrateTimeCommand(), 10000, 'calibrateTimeCommand ' + address);
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
           return true;
@@ -644,7 +644,7 @@ class Manager extends EventEmitter {
     // Cache empty: connect and read from lock (mutex held via _connectLock)
     try {
       for (let attempt = 1; attempt <= 3; attempt++) {
-        if (!(await this._connectLock(lock))) {
+        if (!(await this._connectLock(lock, false))) {  // getLockSound needs no adminAuth
           if (attempt < 3) {
             await sleep(5000);
             continue;
@@ -681,7 +681,7 @@ class Manager extends EventEmitter {
     if (lock == undefined) {
       return false;
     }
-    if (!(await this._connectLock(lock))) {
+    if (!(await this._connectLock(lock, false))) {  // getOperationLog needs no adminAuth
       return false;
     }
     try {
@@ -785,11 +785,13 @@ class Manager extends EventEmitter {
   }
 
   /**
-   *
    * @param {import('ttlock-sdk-js').TTLock} lock
-   * @param {boolean} readData
+   * @param {boolean} [needsAdmin=true] - Whether this operation requires macro_adminLogin.
+   *   Pass false for read-only operations (getOperationLog, calibrateTime) that work
+   *   without admin auth — avoids an unnecessary checkAdminCommand that causes some lock
+   *   firmware to disconnect immediately after the connect(false) handshake.
    */
-  async _connectLock(lock) {
+  async _connectLock(lock, needsAdmin = true) {
     const address = lock.getAddress();
     // Cancel any pending background retry (initial connect(false) loop) so that a user
     // operation is never delayed indefinitely by a retrying connect(false) that holds the
@@ -838,9 +840,11 @@ class Manager extends EventEmitter {
         if (res) {
           console.log('Connected to', address);
           // If the SDK's onConnected() didn't call macro_adminLogin (because autoLockTime
-          // was not -1), call it manually now. searchDeviceFeatureCommand has already run
-          // so checkAdminCommand will succeed.
-          if (!lock.adminAuth) {
+          // was not -1), and this operation requires admin auth, call it manually now.
+          // searchDeviceFeatureCommand has already run so checkAdminCommand will succeed.
+          // Operations like getOperationLog and calibrateTime do NOT need adminAuth and
+          // should pass needsAdmin=false to avoid the extra round-trip that can disconnect.
+          if (needsAdmin && !lock.adminAuth) {
             await sleep(300);
             const adminOk = await lock.macro_adminLogin().catch((e) => {
               console.warn('macro_adminLogin failed:', e.message);
