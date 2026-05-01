@@ -59,7 +59,12 @@ async function handlePasscode(api, ws, msg) {
     }
     res = await manager.addPasscode(address, passcode.type, passcode.newPassCode, passcode.startDate, passcode.endDate);
   } else if (passCodeIsDelete) {
-    res = await manager.deletePasscode(address, passcode.type, passcode.passCode);
+    const codeToDelete = passcode.passCode || passcode.newPassCode;
+    if (!codeToDelete) {
+      api.sendError('Invalid passcode data: cannot determine code to delete', msg);
+      return;
+    }
+    res = await manager.deletePasscode(address, passcode.type, codeToDelete);
   } else {
     if (!passcode.passCode || !passcode.newPassCode) {
       api.sendError('Invalid passcode data: missing passCode or newPassCode for update', msg);

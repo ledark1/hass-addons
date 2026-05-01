@@ -230,9 +230,14 @@ export default {
     },
     async showDeletePasscodeDialog(passcode) {
       if (passcode !== undefined) {
-        if (await this.$refs.confirm.open(this.$t('common.confirm'), this.$t('credentials.confirmDeletePin'))) {
+        const codeValue = passcode.newPassCode || passcode.passCode
+        const details = `${this.$t('credentials.confirmDeletePin')}<br><br>
+          <b>${this.$t('credentials.pinCode')} :</b> <code>${codeValue}</code><br>
+          <b>${this.$t('credentials.type')} :</b> ${this.passcodeTypeText[passcode.type]}`
+        if (await this.$refs.confirm.open(this.$t('common.confirm'), details)) {
           let p = structuredClone(passcode)
-          p.passCode = passcode.passCode
+          // passCode peut être vide si le code n'a jamais été modifié → utiliser newPassCode
+          p.passCode = codeValue
           p.newPassCode = -1
           this.$store.dispatch("setPasscode", { lockAddress: this.address, passcode: p })
           this.passcodes = -1
@@ -249,7 +254,10 @@ export default {
     },
     async showDeleteCardDialog(card) {
       if (card !== undefined) {
-        if (await this.$refs.confirm.open(this.$t('common.confirm'), this.$t('credentials.confirmDeleteCard'))) {
+        const label = card.alias && card.alias !== card.cardNumber ? `${card.alias} (${card.cardNumber})` : card.cardNumber
+        const details = `${this.$t('credentials.confirmDeleteCard')}<br><br>
+          <b>${this.$t('credentials.cardSn')} :</b> ${label}`
+        if (await this.$refs.confirm.open(this.$t('common.confirm'), details)) {
           const c = structuredClone(card)
           c.startDate = -1
           this.$store.dispatch("setCard", { lockAddress: this.address, card: c })
@@ -267,7 +275,10 @@ export default {
     },
     async showDeleteFingerDialog(finger) {
       if (finger !== undefined) {
-        if (await this.$refs.confirm.open(this.$t('common.confirm'), this.$t('credentials.confirmDeleteFinger'))) {
+        const label = finger.alias && finger.alias !== finger.fpNumber ? `${finger.alias} (${finger.fpNumber})` : finger.fpNumber
+        const details = `${this.$t('credentials.confirmDeleteFinger')}<br><br>
+          <b>${this.$t('credentials.fingerprintId')} :</b> ${label}`
+        if (await this.$refs.confirm.open(this.$t('common.confirm'), details)) {
           const f = structuredClone(finger)
           f.startDate = -1
           this.$store.dispatch("setFinger", { lockAddress: this.address, finger: f })
