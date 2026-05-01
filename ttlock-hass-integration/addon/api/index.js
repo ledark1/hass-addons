@@ -1,4 +1,4 @@
-import { sleep } from 'ttlock-sdk-js';
+import { sleep } from '@domodom30/ttlock-sdk-js';
 import WebSocket from 'ws';
 import manager from '../src/manager.js';
 import store from '../src/store.js';

@@ -1,4 +1,4 @@
-import { AudioManage } from 'ttlock-sdk-js';
+import { AudioManage } from '@domodom30/ttlock-sdk-js';
 import store from '../src/store.js';
 import manager from '../src/manager.js';
 

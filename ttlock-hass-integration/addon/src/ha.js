@@ -1,7 +1,7 @@
 import mqtt from 'async-mqtt';
 import manager from './manager.js';
 import store from './store.js';
-import { LockedStatus } from 'ttlock-sdk-js';
+import { LockedStatus } from '@domodom30/ttlock-sdk-js';
 
 class HomeAssistant {
   /**

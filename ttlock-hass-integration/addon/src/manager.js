@@ -1,6 +1,6 @@
 import EventEmitter from 'node:events';
 import store from './store.js';
-import { TTLockClient, AudioManage, LockedStatus, LogOperateCategory, LogOperateNames } from 'ttlock-sdk-js';
+import { TTLockClient, AudioManage, LockedStatus, LogOperateCategory, LogOperateNames } from '@domodom30/ttlock-sdk-js';
 
 const ScanType = Object.freeze({
   NONE: 0,

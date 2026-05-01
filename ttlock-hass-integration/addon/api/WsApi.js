@@ -3,7 +3,7 @@ import manager from '../src/manager.js';
 import store from '../src/store.js';
 import Lock from './Lock.js';
 import Message from './Message.js';
-import { sleep } from 'ttlock-sdk-js';
+import { sleep } from '@domodom30/ttlock-sdk-js';
 
 class WsApi {
   /**
