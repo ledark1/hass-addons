@@ -385,9 +385,12 @@ class Manager extends EventEmitter {
     if (!lock?.hasPassCode()) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
-      return await lock.addPassCode(type, passCode, startDate, endDate);
+      console.log('addPasscode → addPassCode', { type, passCode });
+      const ok = await lock.addPassCode(type, passCode, startDate, endDate);
+      if (!ok) return false;
+      return await lock.getPassCodes();
     } catch (error) {
-      console.error(error);
+      console.error('addPasscode error:', error);
       return false;
     } finally {
       this._releaseConnect(address);
@@ -403,9 +406,12 @@ class Manager extends EventEmitter {
     }
     if (!(await this._connectLock(lock))) return false;
     try {
-      return await lock.updatePassCode(type, oldPasscode, newPasscode, startDate, endDate);
+      console.log('updatePasscode → updatePassCode', { type, oldPasscode, newPasscode });
+      const ok = await lock.updatePassCode(type, oldPasscode, newPasscode, startDate, endDate);
+      if (!ok) return false;
+      return await lock.getPassCodes();
     } catch (error) {
-      console.error(error);
+      console.error('updatePasscode error:', error);
       return false;
     } finally {
       this._releaseConnect(address);
@@ -417,23 +423,13 @@ class Manager extends EventEmitter {
     if (!lock?.hasPassCode()) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
-      return await lock.deletePassCode(type, passCode);
-    } catch (error) {
-      console.error(error);
-      return false;
-    } finally {
-      this._releaseConnect(address);
-    }
-  }
-
-  async getPasscodes(address) {
-    const lock = this.pairedLocks.get(address);
-    if (!lock?.hasPassCode()) return false;
-    if (!(await this._connectLock(lock))) return false;
-    try {
+      console.log('deletePasscode → deletePassCode', { type, passCode });
+      const ok = await lock.deletePassCode(type, passCode);
+      console.log('deletePassCode result:', ok);
+      if (!ok) return false;
       return await lock.getPassCodes();
     } catch (error) {
-      console.error(error);
+      console.error('deletePasscode error:', error);
       return false;
     } finally {
       this._releaseConnect(address);
@@ -446,10 +442,13 @@ class Manager extends EventEmitter {
     if (!(await this._connectLock(lock))) return false;
     try {
       const card = await lock.addICCard(startDate, endDate);
+      if (!card) return false;
       store.setCardAlias(card, alias);
-      return card;
+      const cards = await lock.getICCards();
+      for (const c of cards) c.alias = store.getCardAlias(c.cardNumber);
+      return cards;
     } catch (error) {
-      console.error(error);
+      console.error('addCard error:', error);
       return false;
     } finally {
       this._releaseConnect(address);
@@ -461,11 +460,14 @@ class Manager extends EventEmitter {
     if (!lock?.hasICCard()) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
-      const result = await lock.updateICCard(card, startDate, endDate);
+      const ok = await lock.updateICCard(card, startDate, endDate);
+      if (!ok && ok !== '') return false;
       store.setCardAlias(card, alias);
-      return result;
+      const cards = await lock.getICCards();
+      for (const c of cards) c.alias = store.getCardAlias(c.cardNumber);
+      return cards;
     } catch (error) {
-      console.error(error);
+      console.error('updateCard error:', error);
       return false;
     } finally {
       this._releaseConnect(address);
@@ -477,29 +479,16 @@ class Manager extends EventEmitter {
     if (!lock?.hasICCard()) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
-      const result = await lock.deleteICCard(card);
+      console.log('deleteCard → deleteICCard', { card });
+      const ok = await lock.deleteICCard(card);
+      console.log('deleteICCard result:', ok);
+      if (!ok) return false;
       store.deleteCardAlias(card);
-      return result;
-    } catch (error) {
-      console.error(error);
-      return false;
-    } finally {
-      this._releaseConnect(address);
-    }
-  }
-
-  async getCards(address) {
-    const lock = this.pairedLocks.get(address);
-    if (!lock?.hasICCard()) return false;
-    if (!(await this._connectLock(lock))) return false;
-    try {
       const cards = await lock.getICCards();
-      for (const card of cards) {
-        card.alias = store.getCardAlias(card.cardNumber);
-      }
+      for (const c of cards) c.alias = store.getCardAlias(c.cardNumber);
       return cards;
     } catch (error) {
-      console.error(error);
+      console.error('deleteCard error:', error);
       return false;
     } finally {
       this._releaseConnect(address);
@@ -512,10 +501,13 @@ class Manager extends EventEmitter {
     if (!(await this._connectLock(lock))) return false;
     try {
       const finger = await lock.addFingerprint(startDate, endDate);
+      if (!finger) return false;
       store.setFingerAlias(finger, alias);
-      return finger;
+      const fingers = await lock.getFingerprints();
+      for (const f of fingers) f.alias = store.getFingerAlias(f.fpNumber);
+      return fingers;
     } catch (error) {
-      console.error(error);
+      console.error('addFinger error:', error);
       return false;
     } finally {
       this._releaseConnect(address);
@@ -527,11 +519,14 @@ class Manager extends EventEmitter {
     if (!lock?.hasFingerprint()) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
-      const result = await lock.updateFingerprint(finger, startDate, endDate);
+      const ok = await lock.updateFingerprint(finger, startDate, endDate);
+      if (!ok && ok !== '') return false;
       store.setFingerAlias(finger, alias);
-      return result;
+      const fingers = await lock.getFingerprints();
+      for (const f of fingers) f.alias = store.getFingerAlias(f.fpNumber);
+      return fingers;
     } catch (error) {
-      console.error(error);
+      console.error('updateFinger error:', error);
       return false;
     } finally {
       this._releaseConnect(address);
@@ -543,29 +538,16 @@ class Manager extends EventEmitter {
     if (!lock?.hasFingerprint()) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
-      const result = await lock.deleteFingerprint(finger);
+      console.log('deleteFinger → deleteFingerprint', { finger });
+      const ok = await lock.deleteFingerprint(finger);
+      console.log('deleteFingerprint result:', ok);
+      if (!ok) return false;
       store.deleteFingerAlias(finger);
-      return result;
-    } catch (error) {
-      console.error(error);
-      return false;
-    } finally {
-      this._releaseConnect(address);
-    }
-  }
-
-  async getFingers(address) {
-    const lock = this.pairedLocks.get(address);
-    if (!lock?.hasFingerprint()) return false;
-    if (!(await this._connectLock(lock))) return false;
-    try {
       const fingers = await lock.getFingerprints();
-      for (const finger of fingers) {
-        finger.alias = store.getFingerAlias(finger.fpNumber);
-      }
+      for (const f of fingers) f.alias = store.getFingerAlias(f.fpNumber);
       return fingers;
     } catch (error) {
-      console.error(error);
+      console.error('deleteFinger error:', error);
       return false;
     } finally {
       this._releaseConnect(address);

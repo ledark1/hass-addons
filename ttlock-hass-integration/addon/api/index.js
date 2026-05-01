@@ -51,20 +51,21 @@ async function handlePasscode(api, ws, msg) {
   const passCodeIsNew = passcode.passCode == null || passcode.passCode === '' || passcode.passCode == -1;
   const passCodeIsDelete = passcode.newPassCode == null || passcode.newPassCode === '' || passcode.newPassCode == -1;
 
-  let res = false;
+  // Each manager method now returns the updated passcodes array on success, or false on failure.
+  let passcodes = false;
   if (passCodeIsNew) {
     if (!passcode.newPassCode || !passcode.startDate || !passcode.endDate) {
       api.sendError('Invalid passcode data: missing required fields', msg);
       return;
     }
-    res = await manager.addPasscode(address, passcode.type, passcode.newPassCode, passcode.startDate, passcode.endDate);
+    passcodes = await manager.addPasscode(address, passcode.type, passcode.newPassCode, passcode.startDate, passcode.endDate);
   } else if (passCodeIsDelete) {
     const codeToDelete = passcode.passCode || passcode.newPassCode;
     if (!codeToDelete) {
       api.sendError('Invalid passcode data: cannot determine code to delete', msg);
       return;
     }
-    res = await manager.deletePasscode(address, passcode.type, codeToDelete);
+    passcodes = await manager.deletePasscode(address, passcode.type, codeToDelete);
   } else {
     if (!passcode.passCode || !passcode.newPassCode) {
       api.sendError('Invalid passcode data: missing passCode or newPassCode for update', msg);
@@ -72,17 +73,11 @@ async function handlePasscode(api, ws, msg) {
     }
     const startDate = passcode.startDate || '200001010000';
     const endDate = passcode.endDate || '209912012359';
-    res = await manager.updatePasscode(address, passcode.type, passcode.passCode, passcode.newPassCode, startDate, endDate);
+    passcodes = await manager.updatePasscode(address, passcode.type, passcode.passCode, passcode.newPassCode, startDate, endDate);
   }
 
-  if (!res) {
-    api.sendError('PIN operation failed', msg);
-    return;
-  }
-
-  const passcodes = await manager.getPasscodes(address);
   if (!passcodes) {
-    api.sendError('Failed fetching PINs', msg);
+    api.sendError('PIN operation failed', msg);
     return;
   }
   api.sendPasscodes(address, passcodes);
@@ -97,25 +92,19 @@ async function handleCard(api, ws, msg) {
 
   const card = msg.data.card;
   const address = msg.data.address;
-  let res = false;
+  // Each manager method now returns the updated cards array on success, or false on failure.
+  let cards = false;
 
   if (card.cardNumber == -1) {
-    res = await manager.addCard(address, card.startDate, card.endDate, card.alias);
+    cards = await manager.addCard(address, card.startDate, card.endDate, card.alias);
   } else if (card.startDate == -1) {
-    res = await manager.deleteCard(address, card.cardNumber);
+    cards = await manager.deleteCard(address, card.cardNumber);
   } else {
-    res = await manager.updateCard(address, card.cardNumber, card.startDate, card.endDate, card.alias);
+    cards = await manager.updateCard(address, card.cardNumber, card.startDate, card.endDate, card.alias);
   }
 
-  const cards = await manager.getCards(address);
-  if (!res || res == '') {
-    // Reload anyway: card may have been added on the lock despite a SDK error (BLE CRC race).
-    if (cards) api.sendCards(address, cards);
-    api.sendError('Card operation failed', msg);
-    return;
-  }
   if (!cards) {
-    api.sendError('Failed fetching cards', msg);
+    api.sendError('Card operation failed', msg);
     return;
   }
   api.sendCards(address, cards);
@@ -130,24 +119,19 @@ async function handleFinger(api, ws, msg) {
 
   const finger = msg.data.finger;
   const address = msg.data.address;
-  let res = false;
+  // Each manager method now returns the updated fingers array on success, or false on failure.
+  let fingers = false;
 
   if (finger.fpNumber == -1) {
-    res = await manager.addFinger(address, finger.startDate, finger.endDate, finger.alias);
+    fingers = await manager.addFinger(address, finger.startDate, finger.endDate, finger.alias);
   } else if (finger.startDate == -1) {
-    res = await manager.deleteFinger(address, finger.fpNumber);
+    fingers = await manager.deleteFinger(address, finger.fpNumber);
   } else {
-    res = await manager.updateFinger(address, finger.fpNumber, finger.startDate, finger.endDate, finger.alias);
+    fingers = await manager.updateFinger(address, finger.fpNumber, finger.startDate, finger.endDate, finger.alias);
   }
 
-  if (!res || res == '') {
-    api.sendError('Fingerprint operation failed', msg);
-    return;
-  }
-
-  const fingers = await manager.getFingers(address);
   if (!fingers) {
-    api.sendError('Failed fetching fingerprints', msg);
+    api.sendError('Fingerprint operation failed', msg);
     return;
   }
   api.sendFingers(address, fingers);
