@@ -597,23 +597,16 @@ class Manager extends EventEmitter {
 
   async _tryCalibrateTime(lock, address, attempt) {
     try {
-      // calibrateTimeCommand() only needs this.privateData.aesKey stored since pairing.
-      // No adminAuth required — pass needsAdmin=false to avoid the checkAdminCommand
-      // round-trip that causes some lock firmware to disconnect.
+      // COMM_TIME_CALIBRATE requires an authenticated admin session — without it the
+      // firmware returns FAILED + errorCode=0x02 (ERROR_NO_PERMISSION). The admin login
+      // must happen as part of the connect handshake (via _connectLock(lock, true) in
+      // calibrateTime), not after the connection is established.
       await withTimeout(lock.calibrateTimeCommand(), 10000, 'calibrateTimeCommand ' + address);
       if (lock.isConnected()) await lock.disconnect().catch(() => {});
       return { done: true, res: true };
     } catch (error) {
       console.error(`calibrateTime attempt ${attempt}/3 error:`, error.message);
       if (lock.isConnected()) await lock.disconnect().catch(() => {});
-      // "Failed setting lock time" = the lock explicitly rejected the command (FAILED
-      // response code). This is a known firmware limitation on some TTLock hardware
-      // (the SDK itself says "this seems to fail on some locks" and swallows the error
-      // during pairing). Retrying will not help — bail out immediately.
-      if (error.message === 'Failed setting lock time') {
-        console.log('calibrateTime: lock firmware does not support time calibration, giving up');
-        return { done: true, res: false };
-      }
       return { done: false };
     }
   }
@@ -623,8 +616,11 @@ class Manager extends EventEmitter {
     if (lock === undefined) return false;
     try {
       for (let attempt = 1; attempt <= 3; attempt++) {
-        if (!(await this._connectLock(lock, false))) {
-          // calibrateTimeCommand needs no adminAuth
+        // needsAdmin=true: the lock rejects COMM_TIME_CALIBRATE with ERROR_NO_PERMISSION
+        // unless the session is admin-authenticated. Doing the admin login in the connect
+        // handshake (rather than after) is the only way that succeeds reliably — a separate
+        // macro_adminLogin call after _connectLock(false) gets "No response to checkAdmin".
+        if (!(await this._connectLock(lock, true))) {
           if (attempt < 3) {
             await sleep(5000);
             continue;
