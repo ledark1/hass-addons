@@ -70,6 +70,7 @@
   </v-dialog>
 </template>
 <script>
+import { toRaw } from "vue"
 export default {
   name: "Passcode",
   props: ["show", "address", "value"],
@@ -104,7 +105,7 @@ export default {
           endDate: "209912012359",
         }
       } else {
-        this.passcode = structuredClone(passcode)
+        this.passcode = structuredClone(toRaw(passcode))
         this.passcode.passCode = passcode.newPassCode || passcode.passCode || -1
         this.passcode.newPassCode = ""
         this.passcode.startDate = passcode.startDate || "200001010000"

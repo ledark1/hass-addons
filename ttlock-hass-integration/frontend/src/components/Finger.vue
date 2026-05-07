@@ -155,6 +155,7 @@
 </template>
 <script>
 import moment from "moment"
+import { toRaw } from "vue"
 
 export default {
   name: "Finger",
@@ -196,7 +197,7 @@ export default {
           alias: ""
         }
       } else {
-        this.finger = structuredClone(finger)
+        this.finger = structuredClone(toRaw(finger))
       }
     },
     async saveFinger() {

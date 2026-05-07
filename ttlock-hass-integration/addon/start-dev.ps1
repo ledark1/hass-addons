@@ -4,22 +4,16 @@
 
 $env:DATA_PATH = "$PSScriptRoot\dev-data"   # local folder instead of /data
 
-# MQTT — comment out if you don't have a local broker
-# $env:MQTT_HOST  = "192.168.1.x"
-# $env:MQTT_PORT  = "1883"
-# $env:MQTT_SSL   = "false"
-# $env:MQTT_USER  = "user"
-# $env:MQTT_PASS  = "password"
-
 # Noble BLE gateway — set to "noble" to use a remote noble-websocket gateway
 # Leave as "none" to use the local BLE adapter directly
-$env:GATEWAY      = "none"
-# $env:GATEWAY      = "noble"
-# $env:GATEWAY_HOST = "192.168.1.x"    # IP or hostname of the noble gateway
-# $env:GATEWAY_PORT = "2846"            # WebSocket port (default 2846)
-# $env:GATEWAY_KEY  = "your-aes-key"   # AES key configured in the gateway
-# $env:GATEWAY_USER = "user"            # WebSocket auth username (if any)
-# $env:GATEWAY_PASS = "password"        # WebSocket auth password (if any)
+# $env:GATEWAY      = "none"
+
+$env:GATEWAY = "noble"
+$env:GATEWAY_HOST = "192.168.135.111"    # IP or hostname of the noble gateway
+$env:GATEWAY_PORT = "8080"            # WebSocket port (default 8080)
+$env:GATEWAY_KEY = "49FBBE89322A42A11ED09B6FBD980ED1"   # AES key configured in the gateway
+$env:GATEWAY_USER = "admin"            # WebSocket auth username (if any)
+$env:GATEWAY_PASS = "admin"        # WebSocket auth password (if any)
 
 # Dev mode — enables stub locks & credentials in WsApi.js
 # $env:DEV_MODE   = "1"

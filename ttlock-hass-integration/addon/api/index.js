@@ -76,8 +76,18 @@ async function handlePasscode(api, ws, msg) {
     passcodes = await manager.updatePasscode(address, passcode.type, passcode.passCode, passcode.newPassCode, startDate, endDate);
   }
 
-  if (!passcodes) {
+  if (passcodes === false) {
     api.sendError('PIN operation failed', msg);
+    return;
+  }
+  if (passcodes === null) {
+    // delete succeeded but getPassCodes failed — re-fetch full credentials
+    const credentials = await manager.getCredentials(address);
+    if (!credentials) {
+      api.sendError('PIN deleted but failed to refresh list', msg);
+      return;
+    }
+    api.sendCredentials(address, credentials);
     return;
   }
   api.sendPasscodes(address, passcodes);
@@ -103,8 +113,18 @@ async function handleCard(api, ws, msg) {
     cards = await manager.updateCard(address, card.cardNumber, card.startDate, card.endDate, card.alias);
   }
 
-  if (!cards) {
+  if (cards === false) {
     api.sendError('Card operation failed', msg);
+    return;
+  }
+  if (cards === null) {
+    // delete succeeded but getICCards failed — re-fetch full credentials
+    const credentials = await manager.getCredentials(address);
+    if (!credentials) {
+      api.sendError('Card deleted but failed to refresh list', msg);
+      return;
+    }
+    api.sendCredentials(address, credentials);
     return;
   }
   api.sendCards(address, cards);
@@ -130,8 +150,18 @@ async function handleFinger(api, ws, msg) {
     fingers = await manager.updateFinger(address, finger.fpNumber, finger.startDate, finger.endDate, finger.alias);
   }
 
-  if (!fingers) {
+  if (fingers === false) {
     api.sendError('Fingerprint operation failed', msg);
+    return;
+  }
+  if (fingers === null) {
+    // delete succeeded but getFingerprints failed — re-fetch full credentials
+    const credentials = await manager.getCredentials(address);
+    if (!credentials) {
+      api.sendError('Fingerprint deleted but failed to refresh list', msg);
+      return;
+    }
+    api.sendCredentials(address, credentials);
     return;
   }
   api.sendFingers(address, fingers);

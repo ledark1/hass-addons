@@ -170,6 +170,7 @@
 
 <script>
 import moment from "moment"
+import { toRaw } from "vue"
 import Passcode from "@/components/Passcode"
 import Card from "@/components/Card"
 import Finger from "@/components/Finger"
@@ -235,7 +236,8 @@ export default {
           <b>${this.$t('credentials.pinCode')} :</b> <code>${codeValue}</code><br>
           <b>${this.$t('credentials.type')} :</b> ${this.passcodeTypeText[passcode.type]}`
         if (await this.$refs.confirm.open(this.$t('common.confirm'), details)) {
-          let p = structuredClone(passcode)
+          // toRaw déproxifie le Proxy Vue avant structuredClone
+          const p = structuredClone(toRaw(passcode))
           // passCode peut être vide si le code n'a jamais été modifié → utiliser newPassCode
           p.passCode = codeValue
           p.newPassCode = -1
@@ -258,7 +260,7 @@ export default {
         const details = `${this.$t('credentials.confirmDeleteCard')}<br><br>
           <b>${this.$t('credentials.cardSn')} :</b> ${label}`
         if (await this.$refs.confirm.open(this.$t('common.confirm'), details)) {
-          const c = structuredClone(card)
+          const c = structuredClone(toRaw(card))
           c.startDate = -1
           this.$store.dispatch("setCard", { lockAddress: this.address, card: c })
           this.cards = -1
@@ -279,7 +281,7 @@ export default {
         const details = `${this.$t('credentials.confirmDeleteFinger')}<br><br>
           <b>${this.$t('credentials.fingerprintId')} :</b> ${label}`
         if (await this.$refs.confirm.open(this.$t('common.confirm'), details)) {
-          const f = structuredClone(finger)
+          const f = structuredClone(toRaw(finger))
           f.startDate = -1
           this.$store.dispatch("setFinger", { lockAddress: this.address, finger: f })
           this.fingers = -1

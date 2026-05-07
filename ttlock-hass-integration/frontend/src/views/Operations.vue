@@ -82,20 +82,13 @@ export default {
       ]
     },
     sortedOperations() {
-      let sorted = structuredClone(this.operations);
-      sorted.sort((a, b) => {
-        if (a.operateDate > b.operateDate) {
-          return -1;
-        } else if (a.operateDate < b.operateDate) {
-          return 1;
-        } else if (a.recordNumber > b.recordNumber) {
-          return -1;
-        } else if (a.recordNumber < b.recordNumber) {
-          return 1;
-        }
+      return [...this.operations].sort((a, b) => {
+        if (a.operateDate > b.operateDate) return -1;
+        if (a.operateDate < b.operateDate) return 1;
+        if (a.recordNumber > b.recordNumber) return -1;
+        if (a.recordNumber < b.recordNumber) return 1;
         return 0;
       });
-      return sorted;
     },
   },
   created() {

@@ -66,6 +66,8 @@ class Manager extends EventEmitter {
     this._cachedAudio = new Map();
     /** @type {Map<string, number>} Last known autoLockTime per lock */
     this._cachedAutoLock = new Map();
+    /** @type {Map<string, Promise<{passcodes: any, cards: any, fingers: any}>>} In-flight getCredentials promises — coalesces duplicate concurrent requests */
+    this._pendingCredentials = new Map();
     /** @type {'none'|'noble'} */
     this.gateway = 'none';
     this.gateway_host = '';
@@ -337,47 +339,74 @@ class Manager extends EventEmitter {
   }
 
   async getCredentials(address) {
+    // Coalesce concurrent requests: if a fetch is already in progress for this
+    // address (e.g. user clicked twice, or frontend retried), return the same
+    // promise instead of starting a competing BLE session that saturates the radio.
+    if (this._pendingCredentials.has(address)) {
+      console.log('getCredentials already in progress for', address, '— reusing pending request');
+      return this._pendingCredentials.get(address);
+    }
+    const promise = this._doGetCredentials(address);
+    this._pendingCredentials.set(address, promise);
+    try {
+      return await promise;
+    } finally {
+      this._pendingCredentials.delete(address);
+    }
+  }
+
+  async _doGetCredentials(address) {
     const lock = this.pairedLocks.get(address);
     if (lock === undefined) {
       return { passcodes: false, cards: false, fingers: false };
     }
-    // Single connect/admin-login session for all three reads — avoids three separate
-    // BLE handshakes and the "Command already in progress" collisions that happen
-    // when each sub-call grabs/releases the connection independently.
-    if (!(await this._connectLock(lock))) {
-      return { passcodes: false, cards: false, fingers: false };
-    }
-    try {
-      const passcodes = lock.hasPassCode()
-        ? await lock.getPassCodes().catch((e) => {
-            console.error('getPassCodes:', e.message);
-            return false;
-          })
-        : false;
-      const cardsRaw = lock.hasICCard()
-        ? await lock.getICCards().catch((e) => {
-            console.error('getICCards:', e.message);
-            return false;
-          })
-        : false;
-      let cards = cardsRaw;
-      if (Array.isArray(cardsRaw)) {
-        for (const card of cardsRaw) card.alias = store.getCardAlias(card.cardNumber);
+    // Outer retry loop: the lock sometimes disconnects during data reads even after a
+    // successful connect+adminLogin (firmware drops the link mid-read). When that happens
+    // we release, wait briefly, and retry the full connect+read cycle rather than giving up.
+    const MAX_READ_ATTEMPTS = 3;
+    for (let readAttempt = 1; readAttempt <= MAX_READ_ATTEMPTS; readAttempt++) {
+      if (!(await this._connectLock(lock))) {
+        return { passcodes: false, cards: false, fingers: false };
       }
-      const fingersRaw = lock.hasFingerprint()
-        ? await lock.getFingerprints().catch((e) => {
-            console.error('getFingerprints:', e.message);
-            return false;
-          })
-        : false;
-      let fingers = fingersRaw;
-      if (Array.isArray(fingersRaw)) {
-        for (const f of fingersRaw) f.alias = store.getFingerAlias(f.fpNumber);
+      try {
+        const passcodes = lock.hasPassCode()
+          ? await lock.getPassCodes().catch((e) => {
+              console.error('getPassCodes:', e.message);
+              return false;
+            })
+          : false;
+        const cardsRaw = lock.hasICCard()
+          ? await lock.getICCards().catch((e) => {
+              console.error('getICCards:', e.message);
+              return false;
+            })
+          : false;
+        let cards = cardsRaw;
+        if (Array.isArray(cardsRaw)) {
+          for (const card of cardsRaw) card.alias = store.getCardAlias(card.cardNumber);
+        }
+        const fingersRaw = lock.hasFingerprint()
+          ? await lock.getFingerprints().catch((e) => {
+              console.error('getFingerprints:', e.message);
+              return false;
+            })
+          : false;
+        let fingers = fingersRaw;
+        if (Array.isArray(fingersRaw)) {
+          for (const f of fingersRaw) f.alias = store.getFingerAlias(f.fpNumber);
+        }
+        // If all reads failed and the lock disconnected mid-read, retry the whole cycle.
+        const allFailed = (lock.hasPassCode() ? passcodes === false : false) || (lock.hasICCard() ? cardsRaw === false : false) || (lock.hasFingerprint() ? fingersRaw === false : false);
+        if (allFailed && !lock.isConnected() && readAttempt < MAX_READ_ATTEMPTS) {
+          console.warn(`getCredentials: all reads failed due to disconnect (attempt ${readAttempt}/${MAX_READ_ATTEMPTS}) — retrying`);
+          continue; // _releaseConnect called in finally, then loop re-acquires
+        }
+        return { passcodes, cards, fingers };
+      } finally {
+        this._releaseConnect(address);
       }
-      return { passcodes, cards, fingers };
-    } finally {
-      this._releaseConnect(address);
     }
+    return { passcodes: false, cards: false, fingers: false };
   }
 
   async addPasscode(address, type, passCode, startDate, endDate) {
@@ -385,9 +414,28 @@ class Manager extends EventEmitter {
     if (!lock?.hasPassCode()) return false;
     if (!(await this._connectLock(lock))) return false;
     try {
+      console.log('[diag] addPasscode params', {
+        type, passCode, startDate, endDate,
+        passCodeLen: passCode?.length,
+        connected: lock.isConnected(),
+      });
+      let existing = null;
+      try {
+        existing = await lock.getPassCodes();
+        console.log('[diag] existing passcodes count:', Array.isArray(existing) ? existing.length : existing);
+        if (Array.isArray(existing)) {
+          const dup = existing.find((p) => String(p.newPassCode) === String(passCode));
+          if (dup) console.warn('[diag] duplicate detected before add:', dup);
+        }
+      } catch (e) {
+        console.warn('[diag] pre-add getPassCodes failed:', e.message);
+      }
       console.log('addPasscode → addPassCode', { type, passCode });
       const ok = await lock.addPassCode(type, passCode, startDate, endDate);
-      if (!ok) return false;
+      if (!ok) {
+        console.error('[diag] addPassCode returned falsy:', ok, 'connected:', lock.isConnected());
+        return false;
+      }
       return await lock.getPassCodes();
     } catch (error) {
       console.error('addPasscode error:', error);
@@ -421,19 +469,46 @@ class Manager extends EventEmitter {
   async deletePasscode(address, type, passCode) {
     const lock = this.pairedLocks.get(address);
     if (!lock?.hasPassCode()) return false;
-    if (!(await this._connectLock(lock))) return false;
-    try {
-      console.log('deletePasscode → deletePassCode', { type, passCode });
-      const ok = await lock.deletePassCode(type, passCode);
-      console.log('deletePassCode result:', ok);
-      if (!ok) return false;
-      return await lock.getPassCodes();
-    } catch (error) {
-      console.error('deletePasscode error:', error);
-      return false;
-    } finally {
-      this._releaseConnect(address);
+    let deleteSucceeded = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      if (!(await this._connectLock(lock))) return deleteSucceeded ? null : false;
+      try {
+        if (!deleteSucceeded) {
+          console.log(`deletePasscode attempt ${attempt}/3 — delete`, { type, passCode });
+          const ok = await lock.deletePassCode(type, passCode);
+          console.log('deletePassCode result:', ok);
+          if (!ok) {
+            if (!lock.isConnected() && attempt < 3) {
+              console.warn('deletePasscode: disconnect during delete — retrying');
+              continue;
+            }
+            return false;
+          }
+          deleteSucceeded = true;
+        }
+        console.log(`deletePasscode attempt ${attempt}/3 — getPassCodes`);
+        const passcodes = await lock.getPassCodes().catch((e) => {
+          console.error('deletePasscode getPassCodes:', e.message);
+          return false;
+        });
+        if (passcodes === false) {
+          if (attempt < 3) {
+            console.warn('deletePasscode: getPassCodes failed — retrying');
+            continue;
+          }
+          // delete ok but couldn't refresh list — caller will re-fetch
+          return null;
+        }
+        return passcodes;
+      } catch (error) {
+        console.error('deletePasscode error:', error);
+        if (!lock.isConnected() && attempt < 3) continue;
+        return deleteSucceeded ? null : false;
+      } finally {
+        this._releaseConnect(address);
+      }
     }
+    return deleteSucceeded ? null : false;
   }
 
   async addCard(address, startDate, endDate, alias) {
@@ -477,22 +552,49 @@ class Manager extends EventEmitter {
   async deleteCard(address, card) {
     const lock = this.pairedLocks.get(address);
     if (!lock?.hasICCard()) return false;
-    if (!(await this._connectLock(lock))) return false;
-    try {
-      console.log('deleteCard → deleteICCard', { card });
-      const ok = await lock.deleteICCard(card);
-      console.log('deleteICCard result:', ok);
-      if (!ok) return false;
-      store.deleteCardAlias(card);
-      const cards = await lock.getICCards();
-      for (const c of cards) c.alias = store.getCardAlias(c.cardNumber);
-      return cards;
-    } catch (error) {
-      console.error('deleteCard error:', error);
-      return false;
-    } finally {
-      this._releaseConnect(address);
+    let deleteSucceeded = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      if (!(await this._connectLock(lock))) return deleteSucceeded ? null : false;
+      try {
+        if (!deleteSucceeded) {
+          console.log(`deleteCard attempt ${attempt}/3 — delete`, { card });
+          const ok = await lock.deleteICCard(card);
+          console.log('deleteICCard result:', ok);
+          if (!ok) {
+            if (!lock.isConnected() && attempt < 3) {
+              console.warn('deleteCard: disconnect during delete — retrying');
+              continue;
+            }
+            return false;
+          }
+          store.deleteCardAlias(card);
+          deleteSucceeded = true;
+        }
+        console.log(`deleteCard attempt ${attempt}/3 — getICCards`);
+        const cards = await lock.getICCards().catch((e) => {
+          console.error('deleteCard getICCards:', e.message);
+          return false;
+        });
+        if (cards === false) {
+          if (attempt < 3) {
+            console.warn('deleteCard: getICCards failed — retrying');
+            continue;
+          }
+          return null;
+        }
+        if (Array.isArray(cards)) {
+          for (const c of cards) c.alias = store.getCardAlias(c.cardNumber);
+        }
+        return cards;
+      } catch (error) {
+        console.error('deleteCard error:', error);
+        if (!lock.isConnected() && attempt < 3) continue;
+        return deleteSucceeded ? null : false;
+      } finally {
+        this._releaseConnect(address);
+      }
     }
+    return deleteSucceeded ? null : false;
   }
 
   async addFinger(address, startDate, endDate, alias) {
@@ -536,22 +638,49 @@ class Manager extends EventEmitter {
   async deleteFinger(address, finger) {
     const lock = this.pairedLocks.get(address);
     if (!lock?.hasFingerprint()) return false;
-    if (!(await this._connectLock(lock))) return false;
-    try {
-      console.log('deleteFinger → deleteFingerprint', { finger });
-      const ok = await lock.deleteFingerprint(finger);
-      console.log('deleteFingerprint result:', ok);
-      if (!ok) return false;
-      store.deleteFingerAlias(finger);
-      const fingers = await lock.getFingerprints();
-      for (const f of fingers) f.alias = store.getFingerAlias(f.fpNumber);
-      return fingers;
-    } catch (error) {
-      console.error('deleteFinger error:', error);
-      return false;
-    } finally {
-      this._releaseConnect(address);
+    let deleteSucceeded = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      if (!(await this._connectLock(lock))) return deleteSucceeded ? null : false;
+      try {
+        if (!deleteSucceeded) {
+          console.log(`deleteFinger attempt ${attempt}/3 — delete`, { finger });
+          const ok = await lock.deleteFingerprint(finger);
+          console.log('deleteFingerprint result:', ok);
+          if (!ok) {
+            if (!lock.isConnected() && attempt < 3) {
+              console.warn('deleteFinger: disconnect during delete — retrying');
+              continue;
+            }
+            return false;
+          }
+          store.deleteFingerAlias(finger);
+          deleteSucceeded = true;
+        }
+        console.log(`deleteFinger attempt ${attempt}/3 — getFingerprints`);
+        const fingers = await lock.getFingerprints().catch((e) => {
+          console.error('deleteFinger getFingerprints:', e.message);
+          return false;
+        });
+        if (fingers === false) {
+          if (attempt < 3) {
+            console.warn('deleteFinger: getFingerprints failed — retrying');
+            continue;
+          }
+          return null;
+        }
+        if (Array.isArray(fingers)) {
+          for (const f of fingers) f.alias = store.getFingerAlias(f.fpNumber);
+        }
+        return fingers;
+      } catch (error) {
+        console.error('deleteFinger error:', error);
+        if (!lock.isConnected() && attempt < 3) continue;
+        return deleteSucceeded ? null : false;
+      } finally {
+        this._releaseConnect(address);
+      }
     }
+    return deleteSucceeded ? null : false;
   }
 
   async _trySetAudio(lock, address, audio, attempt) {
@@ -702,7 +831,7 @@ class Manager extends EventEmitter {
     if (operation.password !== undefined) {
       if (LogOperateCategory.IC.includes(operation.recordType)) {
         operation.passwordName = store.getCardAlias(operation.password);
-      } else if (LogOperateCategory.FR.includes(operation.recordType)) {
+      } else if (LogOperateCategory.FINGERPRINT.includes(operation.recordType)) {
         operation.passwordName = store.getFingerAlias(operation.password);
       }
     }
@@ -713,7 +842,6 @@ class Manager extends EventEmitter {
     const lock = this.pairedLocks.get(address);
     if (lock === undefined) return false;
     if (!(await this._connectLock(lock, false))) {
-      // getOperationLog needs no adminAuth
       return false;
     }
     try {
@@ -724,7 +852,7 @@ class Manager extends EventEmitter {
       const operations = structuredClone(await lock.getOperationLog(true, false));
       return operations.filter(Boolean).map((op) => this._enrichOperation(op));
     } catch (error) {
-      console.error(error);
+      console.error(`getOperationLog error:`, error);
       return false;
     } finally {
       this._releaseConnect(address);
@@ -820,18 +948,31 @@ class Manager extends EventEmitter {
    * @returns {Promise<'ok'|'retry'|'abort'>}
    */
   async _doAdminLogin(lock, address, attempt) {
-    await sleep(300);
-    const adminOk = await lock.macro_adminLogin().catch((e) => {
+    // Do NOT add any sleep here: every ms we wait reduces the chance of hitting
+    // the firmware's auth acceptance window. The 50 ms yield in _connectAttempt
+    // (before calling us) is already enough to flush stale disconnect events.
+    // Send checkAdminCommand immediately while the BLE radio is still warm.
+    if (!lock.isConnected()) {
+      console.warn('Lock already disconnected before macro_adminLogin', address, '— retrying connect');
+      return attempt < 4 ? 'retry' : 'abort';
+    }
+    // Pass maxRetries=1: if the lock disconnects during checkAdminCommand, let our
+    // outer _connectLock loop handle the full reconnect rather than wasting ~1 200 ms
+    // retrying on a dead BLE session (SDK default is 3 retries × 600 ms).
+    const adminOk = await lock.macro_adminLogin(1).catch((e) => {
       console.warn('macro_adminLogin failed:', e.message);
       return false;
     });
     if (!adminOk && !lock.isConnected()) {
       // Lock disconnected during admin login — treat as connect failure and retry.
       console.warn('macro_adminLogin disconnected lock', address, '— retrying connect');
-      return attempt < 3 ? 'retry' : 'abort';
+      return attempt < 4 ? 'retry' : 'abort';
     }
     if (!adminOk) {
-      console.warn('macro_adminLogin returned false for', address, '— proceeding anyway');
+      // Without adminAuth the credential reads will fail anyway — retry with a
+      // fresh BLE session rather than proceeding with a half-open handshake.
+      console.warn('macro_adminLogin returned false for', address, '— retrying connect');
+      return attempt < 4 ? 'retry' : 'abort';
     }
     return 'ok';
   }
@@ -846,7 +987,7 @@ class Manager extends EventEmitter {
    */
   async _connectAttempt(lock, address, needsAdmin, attempt) {
     try {
-      console.log(`Connect attempt ${attempt}/3 to ${address}`);
+      console.log(`Connect attempt ${attempt}/4 to ${address}`);
       // Use connect(false) — full handshake including searchDeviceFeatureCommand.
       // This lock firmware requires searchDeviceFeatureCommand to complete before it
       // will accept checkAdminCommand (macro_adminLogin). Using connect(true)/skipDataRead
@@ -862,23 +1003,36 @@ class Manager extends EventEmitter {
             wait--;
           }
         }
-        console.log(`Connect attempt ${attempt}/3 failed (returned false)`);
+        console.log(`Connect attempt ${attempt}/4 failed (returned false)`);
         return false;
       }
       console.log('Connected to', address);
+      // Yield the event loop once before proceeding. When connect(false) returns, the
+      // SDK's onConnected() has fully completed (searchDeviceFeatureCommand + its internal
+      // macro_adminLogin). The firmware sometimes issues a BLE disconnect immediately after
+      // that handshake. Without this yield, the disconnect event hasn't had a chance to
+      // propagate to lock.connected yet — we'd receive a "connected" session that is already
+      // dead, causing every subsequent read to fail and the caller to loop.
+      await sleep(50);
+      if (!lock.isConnected()) {
+        console.warn('Lock self-disconnected right after onConnected', address, '— retrying');
+        return attempt < 4 ? 'retry' : false;
+      }
       // If the SDK's onConnected() didn't call macro_adminLogin (because autoLockTime
       // was not -1), and this operation requires admin auth, call it manually now.
-      // searchDeviceFeatureCommand has already run so checkAdminCommand will succeed.
-      // Operations like getOperationLog and calibrateTime do NOT need adminAuth and
-      // should pass needsAdmin=false to avoid the extra round-trip that can disconnect.
       if (needsAdmin && !lock.adminAuth) {
         const adminResult = await this._doAdminLogin(lock, address, attempt);
         if (adminResult === 'retry') return 'retry';
         if (adminResult === 'abort') return false;
       }
+      // Final sanity check after _doAdminLogin.
+      if (!lock.isConnected()) {
+        console.warn('Lock disconnected just after adminLogin', address, '— retrying');
+        return attempt < 4 ? 'retry' : false;
+      }
       return true;
     } catch (error) {
-      console.error(`Connect attempt ${attempt}/3 error:`, error.message);
+      console.error(`Connect attempt ${attempt}/4 error:`, error.message);
       return false;
     }
   }
@@ -936,12 +1090,12 @@ class Manager extends EventEmitter {
     }
     if (lock.isConnected()) return true;
     if (await this._waitForConnecting(lock, address)) return true;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 4; attempt++) {
       if (lock.isConnected()) return true;
       const result = await this._connectAttempt(lock, address, needsAdmin, attempt);
       if (result === true) return true;
-      // Exponential-ish back-off: 1.5 s then 3 s (vs former flat 5 s).
-      if (attempt < 3) await sleep(attempt * 1500);
+      // Exponential-ish back-off: 1.5 s, 3 s, 4.5 s between retries.
+      if (attempt < 4) await sleep(attempt * 1500);
     }
     console.log('All connect attempts failed for', address);
     this.waitingForConnect.delete(address);

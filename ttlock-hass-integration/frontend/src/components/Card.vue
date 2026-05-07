@@ -142,6 +142,7 @@
 </template>
 <script>
 import moment from "moment"
+import { toRaw } from "vue"
 
 export default {
   name: "Card",
@@ -180,7 +181,7 @@ export default {
           alias: ""
         }
       } else {
-        this.card = structuredClone(card)
+        this.card = structuredClone(toRaw(card))
       }
     },
     async saveCard() {

@@ -3,6 +3,10 @@ import init from './src/init.js';
 
 // Catch errors from noble
 process.on('uncaughtException', (error, promise) => {
+  if (error?.message?.includes('WebSocket was closed before the connection was established')) {
+    console.warn('[Gateway] Unable to connect to the gateway (ESP/noble) — retrying...');
+    return;
+  }
   console.error('uncaughtException catch:', promise);
   console.error(error);
   manager.startupStatus = 1;

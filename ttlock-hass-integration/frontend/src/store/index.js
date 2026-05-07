@@ -211,18 +211,15 @@ const store = createStore({
       commit('setWaitingCredentials');
       api.requestCredentials(lockAddress);
     },
-    async setPasscode({ state, commit }, { lockAddress, passcode }) {
-      if (state.waitingCredentials) return;
+    async setPasscode({ commit }, { lockAddress, passcode }) {
       commit('setWaitingCredentials');
       api.setPasscode(lockAddress, passcode);
     },
-    async setCard({ state, commit }, { lockAddress, card }) {
-      if (state.waitingCredentials) return;
+    async setCard({ commit }, { lockAddress, card }) {
       commit('setWaitingCredentials');
       api.setCard(lockAddress, card);
     },
-    async setFinger({ state, commit }, { lockAddress, finger }) {
-      if (state.waitingCredentials) return;
+    async setFinger({ commit }, { lockAddress, finger }) {
       commit('setWaitingCredentials');
       api.setFinger(lockAddress, finger);
     },
