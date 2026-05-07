@@ -1,6 +1,6 @@
 {
   "name": "ttlock-hass-integration-frontend",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "type": "module",
   "author": "Domodom30 <domodom30@gmail.com>",
   "scripts": {

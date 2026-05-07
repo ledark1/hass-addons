@@ -415,9 +415,12 @@ class Manager extends EventEmitter {
     if (!(await this._connectLock(lock))) return false;
     try {
       console.log('[diag] addPasscode params', {
-        type, passCode, startDate, endDate,
+        type,
+        passCode,
+        startDate,
+        endDate,
         passCodeLen: passCode?.length,
-        connected: lock.isConnected(),
+        connected: lock.isConnected()
       });
       let existing = null;
       try {
@@ -1474,20 +1477,16 @@ class Manager extends EventEmitter {
     if (lock.isConnected()) {
       const status = await lock.getLockStatus();
       if (status == LockedStatus.LOCKED) {
-        console.log('>>>>>> Lock is now locked from new event <<<<<<');
         this.emit('lockLock', lock);
       } else if (status == LockedStatus.UNLOCKED) {
-        console.log('>>>>>> Lock is now unlocked from new event <<<<<<');
         this.emit('lockUnlock', lock);
       }
     } else {
       // Use cached status from BLE advertisement (no connection needed)
       const status = lock.getLockStatus();
       if (status == LockedStatus.LOCKED) {
-        console.log('>>>>>> Lock is now locked from advertisement <<<<<<');
         this.emit('lockLock', lock);
       } else if (status == LockedStatus.UNLOCKED) {
-        console.log('>>>>>> Lock is now unlocked from advertisement <<<<<<');
         this.emit('lockUnlock', lock);
       }
     }
@@ -1525,21 +1524,17 @@ class Manager extends EventEmitter {
       for (let op of operations) {
         if (LogOperateCategory.UNLOCK.includes(op.recordType)) {
           lastStatus = LockedStatus.UNLOCKED;
-          console.log('>>>>>> Lock was unlocked <<<<<<');
           this.emit('lockUnlock', lock);
         } else if (LogOperateCategory.LOCK.includes(op.recordType)) {
           lastStatus = LockedStatus.LOCKED;
-          console.log('>>>>>> Lock was locked <<<<<<');
           this.emit('lockLock', lock);
         }
       }
       const status = await lock.getLockStatus();
       if (lastStatus != LockedStatus.UNKNOWN && status != lastStatus) {
         if (status == LockedStatus.LOCKED) {
-          console.log('>>>>>> Lock is now locked <<<<<<');
           this.emit('lockLock', lock);
         } else if (status == LockedStatus.UNLOCKED) {
-          console.log('>>>>>> Lock is now unlocked <<<<<<');
           this.emit('lockUnlock', lock);
         }
       }
