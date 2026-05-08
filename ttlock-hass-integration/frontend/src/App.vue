@@ -44,6 +44,7 @@
       <router-view />
       <ConfigDlg :show="showConfigDialog" v-on:cancel="hideConfigDialog" />
       <Errors />
+      <Notices />
     </v-main>
   </v-app>
 </template>
@@ -51,9 +52,10 @@
 <script>
 import ConfigDlg from "@/components/ConfigDlg"
 import Errors from "@/components/Errors"
+import Notices from "@/components/Notices"
 
 export default {
-  components: { ConfigDlg, Errors },
+  components: { ConfigDlg, Errors, Notices },
   data() {
     return {
       showConfigDialog: false

@@ -1,5 +1,5 @@
 <template>
-  <v-dialog v-model="localShow" persistent max-width="480px" transition="dialog-bottom-transition">
+  <v-dialog v-model="localShow" persistent max-width="560px" transition="dialog-bottom-transition">
     <v-card rounded="lg">
 
       <!-- En-tête -->
@@ -36,7 +36,76 @@
           density="comfortable"
           inputmode="numeric"
           clearable
+          class="mb-5"
         />
+
+        <!-- Période de validité -->
+        <div class="text-caption text-medium-emphasis text-uppercase font-weight-medium mb-3 d-flex align-center ga-1">
+          <v-icon size="14" icon="mdi-calendar-range" />
+          {{ $t('credentials.validFrom') }} → {{ $t('credentials.validTo') }}
+        </div>
+
+        <v-row dense>
+          <!-- Début -->
+          <v-col cols="6">
+            <v-menu v-model="startDateMenu" :close-on-content-click="false" transition="scale-transition">
+              <template #activator="{ props }">
+                <v-text-field
+                  v-model="startDate"
+                  :label="$t('credentials.validFrom')"
+                  prepend-inner-icon="mdi-calendar-start"
+                  readonly v-bind="props"
+                  variant="outlined" density="comfortable"
+                />
+              </template>
+              <v-date-picker v-model="startDate" @update:modelValue="startDateMenu = false" />
+            </v-menu>
+          </v-col>
+          <v-col cols="6">
+            <v-menu v-model="startTimeMenu" :close-on-content-click="false" transition="scale-transition">
+              <template #activator="{ props }">
+                <v-text-field
+                  v-model="startTime"
+                  :label="$t('card.time')"
+                  prepend-inner-icon="mdi-clock-start"
+                  readonly v-bind="props"
+                  variant="outlined" density="comfortable"
+                />
+              </template>
+              <v-time-picker v-model="startTime" full-width format="24hr" @update:modelValue="startTimeMenu = false" />
+            </v-menu>
+          </v-col>
+
+          <!-- Fin -->
+          <v-col cols="6">
+            <v-menu v-model="endDateMenu" :close-on-content-click="false" transition="scale-transition">
+              <template #activator="{ props }">
+                <v-text-field
+                  v-model="endDate"
+                  :label="$t('credentials.validTo')"
+                  prepend-inner-icon="mdi-calendar-end"
+                  readonly v-bind="props"
+                  variant="outlined" density="comfortable"
+                />
+              </template>
+              <v-date-picker v-model="endDate" @update:modelValue="endDateMenu = false" />
+            </v-menu>
+          </v-col>
+          <v-col cols="6">
+            <v-menu v-model="endTimeMenu" :close-on-content-click="false" transition="scale-transition">
+              <template #activator="{ props }">
+                <v-text-field
+                  v-model="endTime"
+                  :label="$t('card.time')"
+                  prepend-inner-icon="mdi-clock-end"
+                  readonly v-bind="props"
+                  variant="outlined" density="comfortable"
+                />
+              </template>
+              <v-time-picker v-model="endTime" full-width format="24hr" @update:modelValue="endTimeMenu = false" />
+            </v-menu>
+          </v-col>
+        </v-row>
       </v-card-text>
 
       <v-progress-linear v-if="busy" indeterminate color="primary" height="2" />
@@ -70,6 +139,7 @@
   </v-dialog>
 </template>
 <script>
+import moment from "moment"
 import { toRaw } from "vue"
 export default {
   name: "Passcode",
@@ -78,6 +148,14 @@ export default {
     return {
       localShow: false,
       passcode: {},
+      startDateMenu: false,
+      startDate: "",
+      startTimeMenu: false,
+      startTime: "",
+      endDateMenu: false,
+      endDate: "",
+      endTimeMenu: false,
+      endTime: "",
       busy: false,
     }
   },
@@ -101,15 +179,15 @@ export default {
           type: 1,
           newPassCode: "",
           passCode: -1,
-          startDate: "200001010000",
-          endDate: "209912012359",
+          startDate: moment().format("YYYYMMDDHHmm"),
+          endDate: "203012312359",
         }
       } else {
         this.passcode = structuredClone(toRaw(passcode))
         this.passcode.passCode = passcode.newPassCode || passcode.passCode || -1
         this.passcode.newPassCode = ""
-        this.passcode.startDate = passcode.startDate || "200001010000"
-        this.passcode.endDate = passcode.endDate || "209912012359"
+        this.passcode.startDate = passcode.startDate || moment().format("YYYYMMDDHHmm")
+        this.passcode.endDate = passcode.endDate || "203012312359"
       }
     },
     async savePasscode() {
@@ -121,8 +199,16 @@ export default {
       if (this.passcode.passCode == null || this.passcode.passCode === "") {
         this.passcode.passCode = -1
       }
+      // Vuetify 3 v-date-picker / v-time-picker may emit Date objects (not strings)
+      // once the user interacts with them — coerce defensively.
+      const fmt = (date, time) => {
+        const d = date instanceof Date ? moment(date).format("YYYY-MM-DD") : (date || "")
+        const t = time instanceof Date ? moment(time).format("HH:mm") : (time || "")
+        return d.replaceAll("-", "") + t.replaceAll(":", "")
+      }
+      this.passcode.startDate = fmt(this.startDate, this.startTime)
+      this.passcode.endDate = fmt(this.endDate, this.endTime)
       this.busy = true
-      console.log('savePasscode sending:', JSON.stringify(this.passcode))
       await this.$store.dispatch("setPasscode", {
         lockAddress: this.address,
         passcode: this.passcode,
@@ -144,6 +230,14 @@ export default {
         this.$emit("cancel")
         this.busy = false
       }
+    },
+    passcode(newVal) {
+      const startDate = moment(newVal.startDate, "YYYYMMDDHHmm")
+      this.startDate = startDate.isValid() ? startDate.format("YYYY-MM-DD") : moment().format("YYYY-MM-DD")
+      this.startTime = startDate.isValid() ? startDate.format("HH:mm") : "00:00"
+      const endDate = moment(newVal.endDate, "YYYYMMDDHHmm")
+      this.endDate = endDate.isValid() ? endDate.format("YYYY-MM-DD") : "2030-12-31"
+      this.endTime = endDate.isValid() ? endDate.format("HH:mm") : "23:59"
     },
   },
 }

@@ -153,6 +153,15 @@ class WsApi {
     this._send(message.toJSON());
   }
 
+  async sendNotice(messageKey) {
+    const message = new Message();
+    message.setType('notice');
+    message.setData({
+      message: messageKey
+    });
+    this._send(message.toJSON());
+  }
+
   async sendConfig() {
     const message = new Message();
     message.setType('config');

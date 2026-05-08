@@ -176,6 +176,11 @@ class Manager extends EventEmitter {
     return this.newLocks;
   }
 
+  getLastPasscodeError(address) {
+    const lock = this.pairedLocks.get(address);
+    return lock?.lastPasscodeError ?? null;
+  }
+
   /**
    * Init a new lock
    * @param {string} address MAC address
@@ -211,6 +216,9 @@ class Manager extends EventEmitter {
       const res = await withTimeout(lock.unlock(), 15000, 'unlock ' + address);
       console.log('Unlock result for', address, ':', res);
       if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      // The SDK swallows "Failed unlock response" (often a transient CRC corruption) and
+      // returns false. Treat that as a soft-failure so the parent loop reconnects and retries.
+      if (res === false) return { done: false };
       return { done: true, res };
     } catch (error) {
       console.error(`Unlock attempt ${attempt}/3 error:`, error.message);
@@ -257,6 +265,9 @@ class Manager extends EventEmitter {
       const res = await withTimeout(lock.lock(), 15000, 'lock ' + address);
       console.log('Lock result for', address, ':', res);
       if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      // The SDK swallows transient lock-command errors (CRC, bad response) and returns
+      // false. Treat that as a soft-failure so the parent loop reconnects and retries.
+      if (res === false) return { done: false };
       return { done: true, res };
     } catch (error) {
       console.error(`Lock attempt ${attempt}/3 error:`, error.message);
@@ -304,6 +315,9 @@ class Manager extends EventEmitter {
       if (res !== false) this._cachedAutoLock.set(address, value);
       this.emit('lockUpdated', lock);
       if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      // The SDK swallows transient errors and returns false. Treat that as a soft-failure
+      // so the parent loop reconnects and retries.
+      if (res === false) return { done: false };
       return { done: true, res };
     } catch (error) {
       console.error(`setAutoLock attempt ${attempt}/3 error:`, error.message);
@@ -369,14 +383,17 @@ class Manager extends EventEmitter {
         return { passcodes: false, cards: false, fingers: false };
       }
       try {
+        // Wrap each BLE read in withTimeout: without a hard ceiling the SDK can hang
+        // forever on a flaky BLE link, leaving the per-address mutex held and every
+        // subsequent user op stuck (UI spinner spins indefinitely).
         const passcodes = lock.hasPassCode()
-          ? await lock.getPassCodes().catch((e) => {
+          ? await withTimeout(lock.getPassCodes(), 20000, 'getPassCodes ' + address).catch((e) => {
               console.error('getPassCodes:', e.message);
               return false;
             })
           : false;
         const cardsRaw = lock.hasICCard()
-          ? await lock.getICCards().catch((e) => {
+          ? await withTimeout(lock.getICCards(), 20000, 'getICCards ' + address).catch((e) => {
               console.error('getICCards:', e.message);
               return false;
             })
@@ -386,7 +403,7 @@ class Manager extends EventEmitter {
           for (const card of cardsRaw) card.alias = store.getCardAlias(card.cardNumber);
         }
         const fingersRaw = lock.hasFingerprint()
-          ? await lock.getFingerprints().catch((e) => {
+          ? await withTimeout(lock.getFingerprints(), 20000, 'getFingerprints ' + address).catch((e) => {
               console.error('getFingerprints:', e.message);
               return false;
             })
@@ -436,7 +453,12 @@ class Manager extends EventEmitter {
       console.log('addPasscode → addPassCode', { type, passCode });
       const ok = await lock.addPassCode(type, passCode, startDate, endDate);
       if (!ok) {
-        console.error('[diag] addPassCode returned falsy:', ok, 'connected:', lock.isConnected());
+        const detail = lock.lastPasscodeError;
+        console.error(
+          '[diag] addPassCode rejected by lock:',
+          detail ? detail.message : '(no detail — likely admin login or BLE issue)',
+          'connected:', lock.isConnected()
+        );
         return false;
       }
       return await lock.getPassCodes();
@@ -459,7 +481,11 @@ class Manager extends EventEmitter {
     try {
       console.log('updatePasscode → updatePassCode', { type, oldPasscode, newPasscode });
       const ok = await lock.updatePassCode(type, oldPasscode, newPasscode, startDate, endDate);
-      if (!ok) return false;
+      if (!ok) {
+        const detail = lock.lastPasscodeError;
+        if (detail) console.error('updatePasscode rejected by lock:', detail.message);
+        return false;
+      }
       return await lock.getPassCodes();
     } catch (error) {
       console.error('updatePasscode error:', error);
@@ -481,6 +507,8 @@ class Manager extends EventEmitter {
           const ok = await lock.deletePassCode(type, passCode);
           console.log('deletePassCode result:', ok);
           if (!ok) {
+            const detail = lock.lastPasscodeError;
+            if (detail) console.error('deletePasscode rejected by lock:', detail.message);
             if (!lock.isConnected() && attempt < 3) {
               console.warn('deletePasscode: disconnect during delete — retrying');
               continue;
@@ -693,6 +721,9 @@ class Manager extends EventEmitter {
       if (res !== false) this._cachedAudio.set(address, audio);
       this.emit('lockUpdated', lock);
       if (lock.isConnected()) await lock.disconnect().catch(() => {});
+      // The SDK swallows transient errors and returns false. Treat that as a soft-failure
+      // so the parent loop reconnects and retries.
+      if (res === false) return { done: false };
       return { done: true, res };
     } catch (error) {
       console.error(`setAudio attempt ${attempt}/3 error:`, error.message);
@@ -852,7 +883,9 @@ class Manager extends EventEmitter {
       // fresh entries. Keep noCache=false so the cache is merged — passing noCache=true
       // makes the SDK re-fetch from sequence 0 (dozens of BLE round-trips, unreliable).
       if (reload) lock.newEvents = true;
-      const operations = structuredClone(await lock.getOperationLog(true, false));
+      // Wrap in withTimeout: if the BLE link stalls mid-fetch the SDK can hang indefinitely,
+      // which would keep the per-address mutex held and freeze every later user op.
+      const operations = structuredClone(await withTimeout(lock.getOperationLog(true, false), 30000, 'getOperationLog ' + address));
       return operations.filter(Boolean).map((op) => this._enrichOperation(op));
     } catch (error) {
       console.error(`getOperationLog error:`, error);
@@ -959,10 +992,11 @@ class Manager extends EventEmitter {
       console.warn('Lock already disconnected before macro_adminLogin', address, '— retrying connect');
       return attempt < 4 ? 'retry' : 'abort';
     }
-    // Pass maxRetries=1: if the lock disconnects during checkAdminCommand, let our
-    // outer _connectLock loop handle the full reconnect rather than wasting ~1 200 ms
-    // retrying on a dead BLE session (SDK default is 3 retries × 600 ms).
-    const adminOk = await lock.macro_adminLogin(1).catch((e) => {
+    // SDK default (3 retries × 200 ms): some lock firmwares need 1-2 round-trips before
+    // checkAdmin stabilises (random challenge regeneration). maxRetries=1 was too aggressive
+    // and broke add/delete passcode on locks with marginal BLE — keep the full SDK budget
+    // and rely on `_doAdminLogin` returning 'retry' for cross-connect recovery.
+    const adminOk = await lock.macro_adminLogin().catch((e) => {
       console.warn('macro_adminLogin failed:', e.message);
       return false;
     });
@@ -972,8 +1006,10 @@ class Manager extends EventEmitter {
       return attempt < 4 ? 'retry' : 'abort';
     }
     if (!adminOk) {
-      // Without adminAuth the credential reads will fail anyway — retry with a
-      // fresh BLE session rather than proceeding with a half-open handshake.
+      // Without adminAuth the credential reads will fail anyway — retry with a fresh BLE
+      // session. With maxRetries=1 (above) the loop is bounded: 4 connect attempts × 1 admin
+      // retry = 4 attempts per _connectLock, which is enough to absorb a flaky BLE link
+      // without exploding into the 36-attempt avalanche the SDK default produces.
       console.warn('macro_adminLogin returned false for', address, '— retrying connect');
       return attempt < 4 ? 'retry' : 'abort';
     }
@@ -1025,7 +1061,15 @@ class Manager extends EventEmitter {
       // was not -1), and this operation requires admin auth, call it manually now.
       if (needsAdmin && !lock.adminAuth) {
         const adminResult = await this._doAdminLogin(lock, address, attempt);
-        if (adminResult === 'retry') return 'retry';
+        if (adminResult === 'retry') {
+          // Force a clean disconnect: otherwise _connectLock's `if (lock.isConnected()) return true;`
+          // short-circuit would reuse this half-open (connected but no adminAuth) session on
+          // the next iteration, and every getPassCodes/getICCards/getFingerprints would fail
+          // with "No response to checkAdmin" because the SDK retries macro_adminLogin internally
+          // on the same poisoned BLE link.
+          if (lock.isConnected()) await lock.disconnect().catch(() => {});
+          return 'retry';
+        }
         if (adminResult === 'abort') return false;
       }
       // Final sanity check after _doAdminLogin.
@@ -1091,10 +1135,13 @@ class Manager extends EventEmitter {
         return false;
       }
     }
-    if (lock.isConnected()) return true;
-    if (await this._waitForConnecting(lock, address)) return true;
+    // Reuse the existing session only if it satisfies the admin requirement — a connected
+    // but non-admin session is unusable for credential reads (the SDK will spin up its own
+    // macro_adminLogin internally and fail the same way).
+    if (lock.isConnected() && (!needsAdmin || lock.adminAuth)) return true;
+    if ((await this._waitForConnecting(lock, address)) && (!needsAdmin || lock.adminAuth)) return true;
     for (let attempt = 1; attempt <= 4; attempt++) {
-      if (lock.isConnected()) return true;
+      if (lock.isConnected() && (!needsAdmin || lock.adminAuth)) return true;
       const result = await this._connectAttempt(lock, address, needsAdmin, attempt);
       if (result === true) return true;
       // Exponential-ish back-off: 1.5 s, 3 s, 4.5 s between retries.
@@ -1157,7 +1204,11 @@ class Manager extends EventEmitter {
       // user op that fires the moment scanning=false flips.
       const release = await this._acquireMutex(address);
       try {
-        // connect(false) to read device features (firmware, autoLock, passCode, etc.)
+        // connect(false) to read device features (firmware, autoLock, passCode, etc.).
+        // No withTimeout here: the SDK has internal disconnect handling that resolves the
+        // promise. Wrapping with withTimeout would let the mutex be released while the SDK
+        // is still pushing BLE commands, causing "Command already in progress" on the next
+        // connect attempt.
         const result = await lock.connect(false);
         if (result === true) {
           // Remove from connectQueue BEFORE disconnecting so _onLockDisconnected
@@ -1196,7 +1247,10 @@ class Manager extends EventEmitter {
     const release = await this._acquireMutex(lock.getAddress());
     try {
       // connect(false) = full connect: reads firmware, features (autoLock, passCode, etc.)
-      // The lock may self-disconnect after searchDeviceFeatureCommand — handle both cases
+      // The lock may self-disconnect after searchDeviceFeatureCommand — handle both cases.
+      // No withTimeout: the SDK has its own disconnect handling. Wrapping in withTimeout
+      // releases the mutex while the SDK still has commands in flight, which causes
+      // "Command already in progress" on the next connect.
       const result = await lock.connect(false);
       if (result === true) {
         console.log('Successful connect attempt to paired lock', lock.getAddress());
@@ -1333,6 +1387,8 @@ class Manager extends EventEmitter {
       const release = await this._acquireMutex(address);
       let result = false;
       try {
+        // No withTimeout: the SDK has internal disconnect handling. Wrapping releases the
+        // mutex while BLE commands are still in flight → "Command already in progress" later.
         result = await lock.connect(false);
         this.connectRetryTimers.delete(address);
         if (result) {
@@ -1444,7 +1500,14 @@ class Manager extends EventEmitter {
     const release = await this._acquireMutex(lock.getAddress());
     let weConnected = false;
     try {
-      const result = await lock.connect(true); // skipDataRead=true
+      // withTimeout: a wedged connect(true) here would hold the mutex indefinitely and
+      // freeze every user op (delete passcode, unlock, …) on _acquireMutex. The finally
+      // block below force-disconnects on timeout, which clears the SDK's pending-command
+      // state so the next connect doesn't trip "Command already in progress".
+      const result = await withTimeout(lock.connect(true), 15000, 'newEventsConnect ' + lock.getAddress()).catch((e) => {
+        console.warn('_onLockUpdated connect timed out:', e.message);
+        return false;
+      });
       if (!result) {
         lock.newEvents = false; // connect failed — allow retry on next advertisement
         return;
@@ -1458,8 +1521,10 @@ class Manager extends EventEmitter {
       console.error('_onLockUpdated connect/process error:', error.message);
       lock.newEvents = false; // connect failed — allow retry on next advertisement
     } finally {
-      // Disconnect inside the mutex so the next user op gets a clean session.
-      if (weConnected && lock.isConnected()) {
+      // Disconnect inside the mutex so the next user op gets a clean session — this also
+      // serves as the cleanup path for the withTimeout above (forces SDK to drop any
+      // pending commands left over from a stalled connect).
+      if (lock.isConnected()) {
         await lock.disconnect().catch(() => {});
       }
       release();

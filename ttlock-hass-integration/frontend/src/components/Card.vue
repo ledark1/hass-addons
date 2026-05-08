@@ -176,8 +176,8 @@ export default {
       if (card == -1) {
         this.card = {
           cardNumber: -1,
-          startDate: "200001010000",
-          endDate: "209912012359",
+          startDate: "202001010000",
+          endDate: "203012312359",
           alias: ""
         }
       } else {
@@ -187,8 +187,15 @@ export default {
     async saveCard() {
       if (this.busy) return
       this.busy = true
-      this.card.startDate = this.startDate.split("-").join("") + this.startTime.split(":").join("")
-      this.card.endDate = this.endDate.split("-").join("") + this.endTime.split(":").join("")
+      // Vuetify 3 v-date-picker / v-time-picker may emit Date objects (not strings)
+      // once the user interacts with them — coerce defensively.
+      const fmt = (date, time) => {
+        const d = date instanceof Date ? moment(date).format("YYYY-MM-DD") : (date || "")
+        const t = time instanceof Date ? moment(time).format("HH:mm") : (time || "")
+        return d.replaceAll("-", "") + t.replaceAll(":", "")
+      }
+      this.card.startDate = fmt(this.startDate, this.startTime)
+      this.card.endDate = fmt(this.endDate, this.endTime)
       this.card.alias = this.alias
       await this.$store.dispatch("setCard", {
         lockAddress: this.address,

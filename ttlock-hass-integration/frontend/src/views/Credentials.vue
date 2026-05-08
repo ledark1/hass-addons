@@ -223,7 +223,9 @@ export default {
   },
   methods: {
     dateTime(str) {
-      return moment(str, "YYYYMMDDHHmm").format("DD-MM-YYYY HH:mm")
+      if (!str) return "—"
+      const m = moment(str, "YYYYMMDDHHmm", true)
+      return m.isValid() ? m.format("DD-MM-YYYY HH:mm") : "—"
     },
     showEditPasscodeDialog(passcode) {
       this.editPasscode = passcode ?? -1

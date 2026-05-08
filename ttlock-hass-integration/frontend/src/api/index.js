@@ -31,9 +31,37 @@ class Api {
       });
 
       this.ws.addEventListener('message', this._onMessage.bind(this));
+      // When the socket drops (e.g. dev proxy ECONNRESET, page sleep) the in-flight
+      // request's reply lands in a closed socket and is silently dropped server-side.
+      // Clear waiting flags so the UI can recover instead of spinning forever.
+      this.ws.addEventListener('close', this._onClose.bind(this));
+      // After reconnect, re-issue the last pending request so the active view (Operations,
+      // Credentials, Config) refreshes its data without the user having to click again.
+      this.ws.addEventListener('open', this._onOpen.bind(this));
     }
 
     this.ws.reconnect();
+  }
+
+  _onClose() {
+    this.store.commit('clearWaitingFlags');
+  }
+
+  _onOpen() {
+    const pending = this._pendingRequest;
+    if (!pending) return;
+    this._pendingRequest = null;
+    if (pending.type === 'operations') {
+      this.store.dispatch('readOperations', pending.address);
+    } else if (pending.type === 'credentials') {
+      this.store.dispatch('readCredentials', pending.address);
+    } else if (pending.type === 'config') {
+      this.store.dispatch('loadConfig');
+    }
+  }
+
+  _rememberPending(type, address) {
+    this._pendingRequest = { type, address };
   }
 
   async scan() {
@@ -106,6 +134,7 @@ class Api {
   }
 
   async requestCredentials(address) {
+    this._rememberPending('credentials', address);
     this.ws.send(
       JSON.stringify({
         type: 'credentials',
@@ -153,6 +182,7 @@ class Api {
   }
 
   async loadConfig() {
+    this._rememberPending('config');
     this.ws.send(
       JSON.stringify({
         type: 'config',
@@ -187,6 +217,7 @@ class Api {
   }
 
   async requestOperations(address) {
+    this._rememberPending('operations', address);
     this.ws.send(
       JSON.stringify({
         type: 'operations',
@@ -248,6 +279,9 @@ class Api {
       case 'error':
         this._onError(message.data);
         break;
+      case 'notice':
+        this._onNotice(message.data);
+        break;
       case 'config':
         this._onConfig(message.data);
         break;
@@ -281,6 +315,7 @@ class Api {
   }
 
   _onCredentials(data) {
+    if (this._pendingRequest?.type === 'credentials') this._pendingRequest = null;
     if (data?.address !== undefined) {
       this.store.commit('setCredentials', data);
     }
@@ -307,10 +342,16 @@ class Api {
   }
 
   _onError(data) {
+    this._pendingRequest = null;
     this.store.commit('setError', data);
   }
 
+  _onNotice(data) {
+    this.store.commit('setNotice', data);
+  }
+
   _onConfig(data) {
+    if (this._pendingRequest?.type === 'config') this._pendingRequest = null;
     if (data.config === undefined) {
       this.store.commit('setWaitingConfig', false);
       if (data.set !== true) {
@@ -322,6 +363,7 @@ class Api {
   }
 
   _onOperations(data) {
+    if (this._pendingRequest?.type === 'operations') this._pendingRequest = null;
     if (data?.address !== undefined && data?.operations !== undefined) {
       this.store.commit('setOperations', data);
     }

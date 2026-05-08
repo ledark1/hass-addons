@@ -81,6 +81,13 @@
     "timed": "Temporisé",
     "cyclic": "Cyclique"
   },
+  "notices": {
+    "passcode": {
+      "add": "Code PIN ajouté",
+      "update": "Code PIN modifié",
+      "delete": "Code PIN supprimé"
+    }
+  },
   "card": {
     "title": "Carte",
     "aliasHint": "Un nom pour identifier cette carte",

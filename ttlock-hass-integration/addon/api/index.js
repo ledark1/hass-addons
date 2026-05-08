@@ -53,11 +53,13 @@ async function handlePasscode(api, ws, msg) {
 
   // Each manager method now returns the updated passcodes array on success, or false on failure.
   let passcodes = false;
+  let operationKind = null;
   if (passCodeIsNew) {
     if (!passcode.newPassCode || !passcode.startDate || !passcode.endDate) {
       api.sendError('Invalid passcode data: missing required fields', msg);
       return;
     }
+    operationKind = 'add';
     passcodes = await manager.addPasscode(address, passcode.type, passcode.newPassCode, passcode.startDate, passcode.endDate);
   } else if (passCodeIsDelete) {
     const codeToDelete = passcode.passCode || passcode.newPassCode;
@@ -65,19 +67,27 @@ async function handlePasscode(api, ws, msg) {
       api.sendError('Invalid passcode data: cannot determine code to delete', msg);
       return;
     }
+    operationKind = 'delete';
     passcodes = await manager.deletePasscode(address, passcode.type, codeToDelete);
   } else {
     if (!passcode.passCode || !passcode.newPassCode) {
       api.sendError('Invalid passcode data: missing passCode or newPassCode for update', msg);
       return;
     }
-    const startDate = passcode.startDate || '200001010000';
-    const endDate = passcode.endDate || '209912012359';
-    passcodes = await manager.updatePasscode(address, passcode.type, passcode.passCode, passcode.newPassCode, startDate, endDate);
+    if (!passcode.startDate || !passcode.endDate) {
+      api.sendError('Invalid passcode data: missing dates for update', msg);
+      return;
+    }
+    operationKind = 'update';
+    passcodes = await manager.updatePasscode(address, passcode.type, passcode.passCode, passcode.newPassCode, passcode.startDate, passcode.endDate);
   }
 
   if (passcodes === false) {
-    api.sendError('PIN operation failed', msg);
+    const detail = manager.getLastPasscodeError(address);
+    api.sendError(
+      detail ? `PIN operation failed: ${detail.message}` : 'PIN operation failed',
+      msg
+    );
     return;
   }
   if (passcodes === null) {
@@ -88,9 +98,11 @@ async function handlePasscode(api, ws, msg) {
       return;
     }
     api.sendCredentials(address, credentials);
+    api.sendNotice(`notices.passcode.${operationKind}`);
     return;
   }
   api.sendPasscodes(address, passcodes);
+  api.sendNotice(`notices.passcode.${operationKind}`);
 }
 
 async function handleCard(api, ws, msg) {

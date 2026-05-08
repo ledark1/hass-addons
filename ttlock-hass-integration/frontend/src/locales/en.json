@@ -81,6 +81,13 @@
     "timed": "Timed",
     "cyclic": "Cyclic"
   },
+  "notices": {
+    "passcode": {
+      "add": "PIN code added",
+      "update": "PIN code updated",
+      "delete": "PIN code deleted"
+    }
+  },
   "card": {
     "title": "Card",
     "aliasHint": "A name so you can identify this card",

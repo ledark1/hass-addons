@@ -21,6 +21,7 @@ const store = createStore({
     waitingOperations: false,
     waiting: false,
     errors: [],
+    notices: [],
     activeLockAddress: '',
     config: '',
     waitingConfig: false,
@@ -133,6 +134,12 @@ const store = createStore({
     clearErrors(state) {
       state.errors = [];
     },
+    setNotice(state, data) {
+      state.notices.push(data);
+    },
+    clearNotices(state) {
+      state.notices = [];
+    },
     setActiveLockAddress(state, lockAddress) {
       state.activeLockAddress = lockAddress;
     },
@@ -168,6 +175,21 @@ const store = createStore({
     },
     setWaitingOperations(state, isWaiting) {
       state.waitingOperations = isWaiting;
+    },
+    // Reset every spinner flag at once. Called when the WebSocket drops so the UI
+    // doesn't stay stuck on a forever-spinning request whose reply lands in a closed
+    // socket and gets silently dropped server-side.
+    clearWaitingFlags(state) {
+      state.waiting = false;
+      state.waitingCredentials = false;
+      state.waitingCardScan = false;
+      state.waitingFingerScan = false;
+      state.fingerScanProgress = 0;
+      state.waitingOperations = false;
+      state.waitingConfig = false;
+      state.waitingAutoLock = false;
+      state.waitingSettings = false;
+      state.waitingCalibrate = false;
     }
   },
   actions: {

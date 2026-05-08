@@ -192,8 +192,8 @@ export default {
       if (finger == -1) {
         this.finger = {
           fpNumber: -1,
-          startDate: "200001010000",
-          endDate: "209912012359",
+          startDate: "202001010000",
+          endDate: "203012312359",
           alias: ""
         }
       } else {
@@ -203,8 +203,15 @@ export default {
     async saveFinger() {
       if (this.busy) return
       this.busy = true
-      this.finger.startDate = this.startDate.split("-").join("") + this.startTime.split(":").join("")
-      this.finger.endDate = this.endDate.split("-").join("") + this.endTime.split(":").join("")
+      // Vuetify 3 v-date-picker / v-time-picker may emit Date objects (not strings)
+      // once the user interacts with them — coerce defensively.
+      const fmt = (date, time) => {
+        const d = date instanceof Date ? moment(date).format("YYYY-MM-DD") : (date || "")
+        const t = time instanceof Date ? moment(time).format("HH:mm") : (time || "")
+        return d.replaceAll("-", "") + t.replaceAll(":", "")
+      }
+      this.finger.startDate = fmt(this.startDate, this.startTime)
+      this.finger.endDate = fmt(this.endDate, this.endTime)
       this.finger.alias = this.alias
       await this.$store.dispatch("setFinger", {
         lockAddress: this.address,
