@@ -1,106 +1,115 @@
 <template>
-  <v-card :loading="busy" class="ma-2">
-    <v-card-item>
-      <v-card-title>{{ lock.name }}</v-card-title>
-      <v-card-subtitle class="text-caption text-mono">{{ lock.address }}</v-card-subtitle>
-      <template #append>
-        <div class="d-flex align-center ga-1">
-          <v-chip size="x-small" :color="batteryColor" variant="tonal">
-            <v-icon start size="14" :icon="batteryIcon" />
-            {{ lock.battery }}%
-          </v-chip>
-          <v-chip size="x-small" :color="rssiColor" variant="tonal">
-            <v-icon start size="14" :icon="rssiIcon" />
-            {{ lock.rssi }}dB
-          </v-chip>
-        </div>
-      </template>
-    </v-card-item>
-
-    <v-divider />
-
-    <v-card-text class="pa-4">
-      <div class="text-center py-4">
-        <v-icon :icon="stateIcon" :color="stateColor" size="80" />
-        <div class="text-subtitle-1 font-weight-medium mt-2" :class="`text-${stateColor}`">
-          {{ stateLabel }}
-        </div>
+  <v-card :loading="busy" class="lock-card pa-0 d-flex flex-column h-100">
+    <!-- Header -->
+    <div class="d-flex align-start pa-4 pb-3">
+      <div class="flex-grow-1 overflow-hidden">
+        <div class="text-subtitle-1 font-weight-bold text-truncate">{{ lock.name }}</div>
+        <div class="text-caption text-medium-emphasis font-mono text-truncate">{{ lock.address }}</div>
       </div>
+      <v-chip
+        :color="stateColor"
+        variant="tonal"
+        size="small"
+        class="flex-shrink-0"
+        :prepend-icon="stateBadgeIcon"
+      >
+        {{ stateLabel }}
+      </v-chip>
+    </div>
 
-      <div class="px-2 mb-4">
-        <v-btn
-          v-if="canUnlock"
-          block size="large" variant="elevated" color="success"
-          prepend-icon="mdi-lock-open-variant"
-          :loading="waiting" :disabled="waiting"
-          @click="unlockLock"
-        >{{ $t('lock.unlock') }}</v-btn>
-
-        <v-btn
-          v-else-if="canLock"
-          block size="large" variant="elevated" color="primary"
-          prepend-icon="mdi-lock"
-          :loading="waiting" :disabled="waiting"
-          @click="lockLock"
-        >{{ $t('lock.lock') }}</v-btn>
-
-        <v-btn
-          v-else-if="canPair"
-          block size="large" variant="elevated" color="secondary"
-          prepend-icon="mdi-bluetooth-connect"
-          :loading="busy" :disabled="busy"
-          @click="pairLock"
-        >{{ $t('lock.pair') }}</v-btn>
-
-        <v-btn
-          v-else
-          block size="large" variant="tonal" color="grey"
-          prepend-icon="mdi-lock-question"
-          disabled
-        >{{ stateLabel }}</v-btn>
+    <!-- Center: lock state -->
+    <div class="lock-visual flex-grow-1 d-flex flex-column align-center justify-center px-4 py-4">
+      <div class="lock-icon-wrap mb-3" :class="`bg-${stateColor}-tonal`">
+        <v-icon :icon="stateIcon" :color="stateColor" size="44" />
       </div>
-
-      <div v-if="!canPair" class="d-flex justify-center ga-2 flex-wrap">
+      <div class="d-flex align-center ga-2 flex-wrap justify-center">
+        <v-chip
+          v-if="typeof lock.battery === 'number' && lock.battery >= 0"
+          size="x-small" :color="batteryColor" variant="tonal"
+        >
+          <v-icon start size="14" :icon="batteryIcon" />
+          {{ lock.battery }}%
+        </v-chip>
+        <v-chip
+          v-if="typeof lock.rssi === 'number'"
+          size="x-small" :color="rssiColor" variant="tonal"
+        >
+          <v-icon start size="14" :icon="rssiIcon" />
+          {{ lock.rssi }}dB
+        </v-chip>
         <v-chip
           v-if="lock.hasAutoLock && lock.autoLockTime >= 0"
-          size="small" variant="outlined"
+          size="x-small" variant="tonal" color="secondary"
           prepend-icon="mdi-lock-clock"
         >
           {{ lock.autoLockTime > 0 ? lock.autoLockTime + 's' : $t('lock.autoLockOff') }}
         </v-chip>
         <v-chip
           v-if="lock.hasAudio && lock.audio !== undefined"
-          size="small" variant="outlined"
-          :color="lock.audio ? 'success' : 'grey'"
+          size="x-small" variant="tonal"
+          :color="lock.audio ? 'success' : 'secondary'"
           :prepend-icon="lock.audio ? 'mdi-volume-high' : 'mdi-volume-off'"
         >
           {{ lock.audio ? $t('lock.soundOn') : $t('lock.soundOff') }}
         </v-chip>
       </div>
-    </v-card-text>
+    </div>
 
-    <template v-if="!canPair">
-      <v-divider />
-      <v-card-actions>
-        <v-btn variant="text" prepend-icon="mdi-key-chain" size="small" @click="credentials">
-          {{ $t('lock.credentials') }}
-        </v-btn>
-        <v-spacer />
-        <v-menu>
-          <template #activator="{ props }">
-            <v-btn v-bind="props" icon="mdi-dots-vertical" variant="text" size="small" />
-          </template>
-          <v-list density="compact">
-            <v-list-item prepend-icon="mdi-cog" @click="settings">
-              {{ $t('lock.settings') }}
-            </v-list-item>
-            <v-list-item prepend-icon="mdi-history" :disabled="waiting" @click="operations">
-              {{ $t('lock.operationLog') }}
-            </v-list-item>
-          </v-list>
-        </v-menu>
-      </v-card-actions>
-    </template>
+    <!-- Footer actions -->
+    <v-divider />
+    <div class="d-flex align-center pa-3 ga-2">
+      <v-btn
+        v-if="canUnlock"
+        block size="default" variant="flat" color="primary"
+        prepend-icon="mdi-lock-open-variant"
+        :loading="waiting" :disabled="waiting"
+        class="flex-grow-1"
+        @click="unlockLock"
+      >{{ $t('lock.unlock') }}</v-btn>
+
+      <v-btn
+        v-else-if="canLock"
+        block size="default" variant="tonal" color="primary"
+        prepend-icon="mdi-lock"
+        :loading="waiting" :disabled="waiting"
+        class="flex-grow-1"
+        @click="lockLock"
+      >{{ $t('lock.lock') }}</v-btn>
+
+      <v-btn
+        v-else-if="canPair"
+        block size="default" variant="flat" color="primary"
+        prepend-icon="mdi-bluetooth-connect"
+        :loading="busy" :disabled="busy"
+        class="flex-grow-1"
+        @click="pairLock"
+      >{{ $t('lock.pair') }}</v-btn>
+
+      <v-btn
+        v-else
+        block size="default" variant="tonal" color="secondary"
+        prepend-icon="mdi-lock-question"
+        disabled
+        class="flex-grow-1"
+      >{{ stateLabel }}</v-btn>
+
+      <v-menu v-if="!canPair">
+        <template #activator="{ props }">
+          <v-btn v-bind="props" icon="mdi-dots-horizontal" variant="text" size="small" />
+        </template>
+        <v-list density="comfortable">
+          <v-list-item prepend-icon="mdi-key-chain" @click="credentials">
+            <v-list-item-title>{{ $t('lock.credentials') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item prepend-icon="mdi-cog-outline" @click="settings">
+            <v-list-item-title>{{ $t('lock.settings') }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item prepend-icon="mdi-history" :disabled="waiting" @click="operations">
+            <v-list-item-title>{{ $t('lock.operationLog') }}</v-list-item-title>
+          </v-list-item>
+        </v-list>
+      </v-menu>
+    </div>
   </v-card>
 </template>
 
@@ -159,12 +168,19 @@ export default {
       if (this.lock.locked === 1) return 'mdi-lock-open-variant'
       return 'mdi-lock-question'
     },
+    stateBadgeIcon() {
+      if (this.lock.locked === 0) return 'mdi-lock'
+      if (this.lock.locked === 1) return 'mdi-lock-open-variant'
+      return 'mdi-help-circle-outline'
+    },
     stateColor() {
+      if (this.canPair) return 'secondary'
       if (this.lock.locked === 0) return 'error'
       if (this.lock.locked === 1) return 'success'
-      return 'grey'
+      return 'secondary'
     },
     stateLabel() {
+      if (this.canPair) return this.$t('lock.unknown')
       if (this.lock.locked === 0) return this.$t('lock.locked')
       if (this.lock.locked === 1) return this.$t('lock.unlocked')
       return this.$t('lock.unknown')
@@ -215,3 +231,29 @@ export default {
   },
 }
 </script>
+
+<style scoped>
+.lock-card {
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.lock-card:hover {
+  transform: translateY(-2px);
+  border-color: rgb(var(--v-theme-primary));
+  box-shadow: 0 4px 18px -8px rgba(16, 185, 129, 0.25);
+}
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+}
+.lock-icon-wrap {
+  width: 88px;
+  height: 88px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bg-success-tonal { background: rgba(16, 185, 129, 0.12); }
+.bg-error-tonal { background: rgba(239, 68, 68, 0.12); }
+.bg-secondary-tonal { background: rgba(113, 113, 122, 0.12); }
+</style>

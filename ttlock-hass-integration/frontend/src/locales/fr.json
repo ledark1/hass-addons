@@ -5,9 +5,42 @@
     "startScan": "Démarrer le scan BLE",
     "refreshCredentials": "Actualiser les identifiants",
     "status": {
-      "ok": "Démarrage terminé, tout est bon",
-      "error": "Démarrage terminé, erreurs au démarrage",
-      "starting": "Démarrage en cours ..."
+      "ok": "Tout est opérationnel",
+      "error": "Démarrage terminé avec des erreurs",
+      "starting": "Démarrage en cours…"
+    }
+  },
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "locks": "Serrures",
+    "credentials": "Identifiants",
+    "operations": "Journal d'activité",
+    "config": "Configuration"
+  },
+  "theme": {
+    "toggle": "Changer de thème",
+    "light": "Clair",
+    "dark": "Sombre"
+  },
+  "breadcrumb": {
+    "home": "Tableau de bord",
+    "settings": "Paramètres",
+    "operations": "Journal d'activité",
+    "credentials": "Identifiants"
+  },
+  "dashboard": {
+    "title": "Tableau de bord",
+    "subtitle": "Vue d'ensemble de vos serrures et de l'activité récente",
+    "totalLocks": "Total serrures",
+    "connected": "Connectées",
+    "lowBattery": "Batterie faible",
+    "lastAction": "Dernière activité",
+    "yourLocks": "Vos serrures",
+    "yourLocksHint": "Accès rapide aux contrôles et aux identifiants",
+    "empty": {
+      "title": "Aucune serrure appairée",
+      "subtitle": "Lancez un scan Bluetooth pour découvrir et appairer vos serrures TTLock.",
+      "cta": "Démarrer le scan"
     }
   },
   "lock": {
@@ -21,7 +54,7 @@
     "unlocked": "Déverrouillé",
     "connected": "Connecté",
     "disconnected": "Déconnecté",
-    "unknown": "État inconnu",
+    "unknown": "Inconnu",
     "autoLockTime": "Verrouillage auto",
     "autoLockOff": "Désactivé",
     "sound": "Son",
@@ -69,7 +102,12 @@
     "deleteFinger": "Supprimer l'empreinte",
     "confirmDeletePin": "Êtes-vous sûr de vouloir supprimer ce PIN ?",
     "confirmDeleteCard": "Êtes-vous sûr de vouloir supprimer cette carte ?",
-    "confirmDeleteFinger": "Êtes-vous sûr de vouloir supprimer cette empreinte ?"
+    "confirmDeleteFinger": "Êtes-vous sûr de vouloir supprimer cette empreinte ?",
+    "empty": "Aucune entrée pour le moment",
+    "allTitle": "Identifiants",
+    "allSubtitle": "Gérez les codes, cartes et empreintes de chacune de vos serrures",
+    "selectLock": "Sélectionner une serrure",
+    "noLockPaired": "Aucune serrure appairée"
   },
   "passcode": {
     "title": "Code PIN",
@@ -111,7 +149,20 @@
     "date": "Date",
     "battery": "Batterie",
     "credential": "Identifiant",
-    "description": "Description"
+    "description": "Description",
+    "title": "Journal d'activité",
+    "subtitle": "Verrouillages et déverrouillages récents",
+    "totalEntries": "{count} entrées",
+    "allTitle": "Journal d'activité",
+    "allSubtitle": "Historique consolidé de toutes les serrures",
+    "refreshAll": "Tout rafraîchir",
+    "lock": "Serrure",
+    "filterByLock": "Filtrer par serrure",
+    "filterByType": "Filtrer par type",
+    "typeAll": "Tous",
+    "typeLock": "Verrouillage",
+    "typeUnlock": "Déverrouillage",
+    "empty": "Aucune opération à afficher"
   },
   "common": {
     "actions": "Actions",
@@ -121,6 +172,9 @@
     "cancel": "Annuler",
     "ok": "OK",
     "close": "Fermer",
-    "save": "Enregistrer"
+    "save": "Enregistrer",
+    "back": "Retour",
+    "refresh": "Rafraîchir",
+    "invalidJson": "JSON invalide"
   }
 }

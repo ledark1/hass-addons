@@ -5,9 +5,42 @@
     "startScan": "Start BLE scan",
     "refreshCredentials": "Refresh credentials",
     "status": {
-      "ok": "Startup completed, all good",
-      "error": "Startup completed, errors during startup",
-      "starting": "Starting ..."
+      "ok": "All systems ready",
+      "error": "Startup completed with errors",
+      "starting": "Starting…"
+    }
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "locks": "Locks",
+    "credentials": "Credentials",
+    "operations": "Activity log",
+    "config": "Configuration"
+  },
+  "theme": {
+    "toggle": "Toggle theme",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "breadcrumb": {
+    "home": "Dashboard",
+    "settings": "Settings",
+    "operations": "Activity log",
+    "credentials": "Credentials"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "Overview of your locks and recent activity",
+    "totalLocks": "Total locks",
+    "connected": "Connected",
+    "lowBattery": "Low battery",
+    "lastAction": "Last activity",
+    "yourLocks": "Your locks",
+    "yourLocksHint": "Quick access to lock control and credentials",
+    "empty": {
+      "title": "No locks paired yet",
+      "subtitle": "Start a Bluetooth scan to discover and pair your TTLock devices.",
+      "cta": "Start scan"
     }
   },
   "lock": {
@@ -21,7 +54,7 @@
     "unlocked": "Unlocked",
     "connected": "Connected",
     "disconnected": "Disconnected",
-    "unknown": "Unknown state",
+    "unknown": "Unknown",
     "autoLockTime": "Auto lock time",
     "autoLockOff": "Disabled",
     "sound": "Sound",
@@ -69,7 +102,12 @@
     "deleteFinger": "Delete Finger",
     "confirmDeletePin": "Are you sure you want to delete this PIN ?",
     "confirmDeleteCard": "Are you sure you want to delete this Card ?",
-    "confirmDeleteFinger": "Are you sure you want to delete this Fingerprint ?"
+    "confirmDeleteFinger": "Are you sure you want to delete this Fingerprint ?",
+    "empty": "No entries yet",
+    "allTitle": "Credentials",
+    "allSubtitle": "Manage PINs, cards and fingerprints for each of your locks",
+    "selectLock": "Select a lock",
+    "noLockPaired": "No paired lock"
   },
   "passcode": {
     "title": "PIN Code",
@@ -111,7 +149,20 @@
     "date": "Date",
     "battery": "Battery",
     "credential": "Credential",
-    "description": "Description"
+    "description": "Description",
+    "title": "Activity log",
+    "subtitle": "Recent lock and unlock events",
+    "totalEntries": "{count} entries",
+    "allTitle": "Activity log",
+    "allSubtitle": "Consolidated history across all locks",
+    "refreshAll": "Refresh all",
+    "lock": "Lock",
+    "filterByLock": "Filter by lock",
+    "filterByType": "Filter by type",
+    "typeAll": "All",
+    "typeLock": "Lock",
+    "typeUnlock": "Unlock",
+    "empty": "No operations to display"
   },
   "common": {
     "actions": "Actions",
@@ -121,6 +172,9 @@
     "cancel": "Cancel",
     "ok": "OK",
     "close": "Close",
-    "save": "Save"
+    "save": "Save",
+    "back": "Back",
+    "refresh": "Refresh",
+    "invalidJson": "Invalid JSON"
   }
 }

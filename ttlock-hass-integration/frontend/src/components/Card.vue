@@ -3,16 +3,19 @@
     <v-card rounded="lg">
 
       <!-- En-tête -->
-      <v-card-item class="bg-primary pa-4">
-        <template #prepend>
-          <v-icon icon="mdi-credit-card-wireless" size="26" color="white" class="mr-1" />
-        </template>
-        <v-card-title class="text-white text-body-1 font-weight-medium">
-          <template v-if="value == -1">{{ $t('common.add') }}</template>
-          <template v-else>{{ $t('common.edit') }}</template>
-          {{ $t('card.title') }}
-        </v-card-title>
-      </v-card-item>
+      <div class="d-flex align-center pa-5 pb-4 ga-3">
+        <v-avatar size="36" color="primary" variant="tonal">
+          <v-icon size="20">mdi-credit-card-wireless</v-icon>
+        </v-avatar>
+        <div>
+          <div class="text-subtitle-1 font-weight-bold">
+            <template v-if="value == -1">{{ $t('common.add') }}</template>
+            <template v-else>{{ $t('common.edit') }}</template>
+            {{ $t('card.title') }}
+          </div>
+          <div class="text-caption text-medium-emphasis">{{ $t('card.aliasHint') }}</div>
+        </div>
+      </div>
 
       <v-divider />
 
@@ -114,21 +117,19 @@
       <v-divider v-else />
 
       <!-- Actions -->
-      <v-card-actions class="pa-4">
-        <v-spacer />
+      <v-card-actions class="px-4 py-3">
         <v-btn
           variant="text"
-          color="error"
-          prepend-icon="mdi-close"
           :disabled="busy"
           @click="$emit('cancel')"
         >
-          {{ $t('common.close') }}
+          {{ $t('common.cancel') }}
         </v-btn>
+        <v-spacer />
         <v-btn
-          variant="elevated"
+          variant="flat"
           color="primary"
-          prepend-icon="mdi-content-save"
+          prepend-icon="mdi-content-save-outline"
           :loading="busy"
           :disabled="busy"
           @click="saveCard"
@@ -177,7 +178,7 @@ export default {
         this.card = {
           cardNumber: -1,
           startDate: "202001010000",
-          endDate: "203012312359",
+          endDate: "209912312359",
           alias: ""
         }
       } else {

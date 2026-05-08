@@ -1,5 +1,5 @@
 <template>
-  <v-snackbar v-model="hasErrors" :vertical="true" :timeout="-1" color="red" theme="dark">
+  <v-snackbar v-model="hasErrors" :vertical="true" :timeout="-1" color="error" theme="dark">
     <v-list-item v-for="error of errors" :key="error.message" :title="error.message">
     </v-list-item>
 

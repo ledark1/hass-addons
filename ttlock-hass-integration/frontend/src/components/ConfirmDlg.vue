@@ -6,33 +6,31 @@
     @keydown.esc="cancel"
   >
     <v-card>
-      <v-toolbar theme="dark" :color="options.color" density="compact" flat>
-        <v-toolbar-title class="text-body-2 font-weight-bold text-grey">
-          {{ title }}
-        </v-toolbar-title>
-      </v-toolbar>
+      <div class="d-flex align-center pa-5 pb-3 ga-3">
+        <v-avatar size="36" color="warning" variant="tonal">
+          <v-icon size="20">mdi-alert-circle-outline</v-icon>
+        </v-avatar>
+        <div class="text-subtitle-1 font-weight-bold">{{ title }}</div>
+      </div>
+      <v-divider />
       <v-card-text
         v-show="!!message"
-        class="pa-4 text-black"
+        class="pa-5 text-body-2"
         v-html="message"
-      ></v-card-text>
-      <v-card-actions class="pt-3">
-        <v-spacer></v-spacer>
+      />
+      <v-divider />
+      <v-card-actions class="px-4 py-3">
         <v-btn
           v-if="!options.noconfirm"
-          color="red-darken-4"
-          variant="elevated"
-          class="body-2 font-weight-bold"
+          variant="text"
           @click="cancel"
-          >{{ $t('common.cancel') }}</v-btn
-        >
+        >{{ $t('common.cancel') }}</v-btn>
+        <v-spacer />
         <v-btn
-          color="green-darken-4"
-          class="body-2 font-weight-bold"
-          variant="elevated"
+          variant="flat"
+          color="primary"
           @click="agree"
-          >{{ $t('common.ok') }}</v-btn
-        >
+        >{{ $t('common.ok') }}</v-btn>
       </v-card-actions>
     </v-card>
   </v-dialog>
@@ -49,8 +47,7 @@ export default {
       message: null,
       title: null,
       options: {
-        color: "grey-lighten-3",
-        width: 400,
+        width: 440,
         zIndex: 200,
         noconfirm: false,
       },

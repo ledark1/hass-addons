@@ -1,105 +1,75 @@
 <template>
-  <v-container v-if="lock.address" style="max-width: 1100px">
-
-    <!-- Header -->
-    <v-card class="mb-4" rounded="lg" elevation="2">
-      <div class="bg-primary">
-        <v-card-item class="pa-4">
-          <template #prepend>
-            <v-avatar color="white" size="44">
-              <v-icon icon="mdi-cog" color="primary" size="26" />
-            </v-avatar>
-          </template>
-          <v-card-title class="text-white text-h6">{{ lock.name }}</v-card-title>
-          <v-card-subtitle class="text-blue-lighten-3 text-caption font-mono">{{ lock.address }}</v-card-subtitle>
-          <template #append>
+  <div v-if="lock.address">
+    <!-- Page header -->
+    <div class="d-flex flex-wrap align-center justify-space-between mb-6 ga-3">
+      <div class="d-flex align-center ga-3">
+        <v-btn icon="mdi-arrow-left" variant="text" size="small" @click="cancel" />
+        <div>
+          <div class="d-flex align-center ga-2">
+            <h1 class="text-h5 font-weight-bold mb-0">{{ lock.name }}</h1>
             <v-chip
-              :color="lock.connected ? 'success' : 'grey'"
+              :color="lock.connected ? 'success' : 'secondary'"
               size="small"
-              variant="flat"
+              variant="tonal"
               :prepend-icon="lock.connected ? 'mdi-bluetooth-connect' : 'mdi-bluetooth-off'"
             >{{ lock.connected ? $t('lock.connected') : $t('lock.disconnected') }}</v-chip>
-          </template>
-        </v-card-item>
-        <div
-          v-if="lock.manufacturer || lock.model || lock.firmware"
-          class="px-4 pb-3 d-flex flex-wrap"
-          style="gap: 8px"
-        >
-          <v-chip
-            v-if="lock.manufacturer"
-            size="x-small"
-            color="white"
-            variant="outlined"
-            prepend-icon="mdi-factory"
-          >{{ lock.manufacturer }}</v-chip>
-          <v-chip
-            v-if="lock.model"
-            size="x-small"
-            color="white"
-            variant="outlined"
-            prepend-icon="mdi-barcode"
-          >{{ lock.model }}</v-chip>
-          <v-chip
-            v-if="lock.firmware"
-            size="x-small"
-            color="white"
-            variant="outlined"
-            prepend-icon="mdi-memory"
-          >{{ lock.firmware }}</v-chip>
+          </div>
+          <div class="text-caption text-medium-emphasis font-mono">{{ lock.address }}</div>
         </div>
       </div>
-    </v-card>
+    </div>
 
     <v-row>
-      <!-- Paramètres -->
+      <!-- Settings -->
       <v-col cols="12" md="6">
-        <v-card class="h-100 d-flex flex-column" rounded="lg" elevation="1">
-          <div class="bg-primary pa-3 d-flex align-center rounded-t-lg">
-            <v-icon icon="mdi-tune" color="white" class="mr-2" size="20" />
-            <span class="text-white text-body-2 font-weight-medium">{{ $t('settings.title') }}</span>
+        <v-card class="pa-0 h-100 d-flex flex-column">
+          <div class="px-5 pt-4 pb-2">
+            <div class="d-flex align-center ga-2 mb-1">
+              <v-icon icon="mdi-tune-variant" size="20" class="text-medium-emphasis" />
+              <h2 class="text-subtitle-1 font-weight-bold">{{ $t('settings.title') }}</h2>
+            </div>
           </div>
-          <v-card-text class="pt-4 pb-2 flex-grow-1">
-            <v-row>
-              <v-col cols="12">
-                <div class="d-flex align-center mb-1">
-                  <v-icon icon="mdi-lock-clock" size="20" class="mr-2 text-medium-emphasis" />
-                  <span class="text-body-2 font-weight-medium">{{ $t('settings.autoLockTime') }}</span>
-                </div>
-                <v-slider
-                  v-model="autoLockTime"
-                  :disabled="!lock.hasAutoLock"
-                  thumb-label="always"
-                  :hint="autoLockHint"
-                  persistent-hint
-                  color="primary"
-                  max="60"
-                  min="0"
-                  class="mt-6"
-                />
-              </v-col>
-              <v-col cols="12">
-                <v-divider class="mb-3" />
-                <v-switch
-                  v-model="audio"
-                  prepend-icon="mdi-volume-high"
-                  :label="$t('lock.sound')"
-                  persistent-hint
-                  :hint="$t('settings.soundHint')"
-                  color="primary"
-                  density="compact"
-                />
-              </v-col>
-            </v-row>
+          <v-divider />
+          <v-card-text class="flex-grow-1">
+            <div class="mb-4">
+              <div class="d-flex align-center ga-2 mb-1">
+                <v-icon icon="mdi-lock-clock" size="18" class="text-medium-emphasis" />
+                <span class="text-body-2 font-weight-medium">{{ $t('settings.autoLockTime') }}</span>
+              </div>
+              <v-slider
+                v-model="autoLockTime"
+                :disabled="!lock.hasAutoLock"
+                thumb-label="always"
+                :hint="autoLockHint"
+                persistent-hint
+                color="primary"
+                max="60"
+                min="0"
+                class="mt-6"
+              />
+            </div>
+
+            <v-divider class="mb-3" />
+
+            <v-switch
+              v-model="audio"
+              prepend-icon="mdi-volume-high"
+              :label="$t('lock.sound')"
+              persistent-hint
+              :hint="$t('settings.soundHint')"
+              color="primary"
+              density="comfortable"
+              hide-details="auto"
+            />
           </v-card-text>
-          <v-card-actions class="px-4 pb-4">
-            <v-btn variant="elevated" color="error" size="small" prepend-icon="mdi-close" @click="cancel">{{ $t('common.cancel') }}</v-btn>
+          <v-divider />
+          <v-card-actions class="px-4 py-3">
+            <v-btn variant="text" @click="cancel">{{ $t('common.cancel') }}</v-btn>
             <v-spacer />
             <v-btn
-              color="success"
-              variant="elevated"
-              size="small"
-              prepend-icon="mdi-content-save"
+              color="primary"
+              variant="flat"
+              prepend-icon="mdi-content-save-outline"
               :disabled="!changesMade"
               :loading="waitingSettings"
               @click="saveSettings"
@@ -108,21 +78,23 @@
         </v-card>
       </v-col>
 
-      <!-- Colonne droite : Synchro horloge + Zone dangereuse empilées -->
+      <!-- Right column -->
       <v-col cols="12" md="6">
-        <!-- Synchroniser l'horloge -->
-        <v-card class="mb-4" rounded="lg" elevation="1">
-          <div class="bg-primary pa-3 d-flex align-center rounded-t-lg">
-            <v-icon icon="mdi-clock-outline" color="white" class="mr-2" size="20" />
-            <span class="text-white text-body-2 font-weight-medium">{{ $t('settings.syncClock') }}</span>
+        <!-- Sync clock -->
+        <v-card class="mb-4">
+          <div class="px-5 pt-4 pb-2">
+            <div class="d-flex align-center ga-2 mb-1">
+              <v-icon icon="mdi-clock-outline" size="20" class="text-medium-emphasis" />
+              <h2 class="text-subtitle-1 font-weight-bold">{{ $t('settings.syncClock') }}</h2>
+            </div>
           </div>
+          <v-divider />
           <v-card-text>
-            <div class="d-flex align-center justify-space-between flex-wrap gap-2">
-              <div class="text-caption text-medium-emphasis">{{ $t('settings.syncClockHint') }}</div>
+            <div class="d-flex align-center justify-space-between flex-wrap ga-3">
+              <div class="text-body-2 text-medium-emphasis">{{ $t('settings.syncClockHint') }}</div>
               <v-btn
-                color="success"
+                color="primary"
                 variant="tonal"
-                size="small"
                 prepend-icon="mdi-clock-sync-outline"
                 :loading="waitingCalibrate"
                 @click="calibrateTime"
@@ -131,16 +103,46 @@
           </v-card-text>
         </v-card>
 
-        <!-- Zone dangereuse -->
-        <v-card rounded="lg" elevation="1" border="error sm">
-          <div class="bg-error pa-3 d-flex align-center rounded-t-lg">
-            <v-icon icon="mdi-alert-circle-outline" color="white" class="mr-2" size="20" />
-            <span class="text-white text-body-2 font-weight-medium">{{ $t('settings.dangerZone') }}</span>
+        <!-- Device info -->
+        <v-card v-if="lock.manufacturer || lock.model || lock.firmware" class="mb-4">
+          <div class="px-5 pt-4 pb-2">
+            <div class="d-flex align-center ga-2 mb-1">
+              <v-icon icon="mdi-information-outline" size="20" class="text-medium-emphasis" />
+              <h2 class="text-subtitle-1 font-weight-bold">{{ $t('settings.deviceInfo') }}</h2>
+            </div>
           </div>
+          <v-divider />
+          <v-card-text class="py-2">
+            <div v-if="lock.manufacturer" class="d-flex justify-space-between py-2">
+              <span class="text-body-2 text-medium-emphasis">{{ $t('settings.manufacturer') }}</span>
+              <span class="text-body-2 font-weight-medium">{{ lock.manufacturer }}</span>
+            </div>
+            <v-divider v-if="lock.manufacturer && (lock.model || lock.firmware)" />
+            <div v-if="lock.model" class="d-flex justify-space-between py-2">
+              <span class="text-body-2 text-medium-emphasis">{{ $t('settings.model') }}</span>
+              <span class="text-body-2 font-weight-medium">{{ lock.model }}</span>
+            </div>
+            <v-divider v-if="lock.model && lock.firmware" />
+            <div v-if="lock.firmware" class="d-flex justify-space-between py-2">
+              <span class="text-body-2 text-medium-emphasis">{{ $t('settings.firmware') }}</span>
+              <span class="text-body-2 font-weight-medium">{{ lock.firmware }}</span>
+            </div>
+          </v-card-text>
+        </v-card>
+
+        <!-- Danger zone -->
+        <v-card class="danger-card">
+          <div class="px-5 pt-4 pb-2">
+            <div class="d-flex align-center ga-2 mb-1">
+              <v-icon icon="mdi-alert-circle-outline" size="20" color="error" />
+              <h2 class="text-subtitle-1 font-weight-bold text-error">{{ $t('settings.dangerZone') }}</h2>
+            </div>
+          </div>
+          <v-divider />
           <v-card-text>
-            <div class="d-flex align-center justify-space-between flex-wrap gap-2">
-              <div class="text-caption text-medium-emphasis mr-4">{{ $t('settings.unpairWarning') }}</div>
-              <v-btn color="error" variant="elevated" size="small" prepend-icon="mdi-link-off" @click="unpair">
+            <div class="d-flex align-center justify-space-between flex-wrap ga-3">
+              <div class="text-body-2 text-medium-emphasis">{{ $t('settings.unpairWarning') }}</div>
+              <v-btn color="error" variant="flat" prepend-icon="mdi-link-off" @click="unpair">
                 {{ $t('settings.unpair') }}
               </v-btn>
             </div>
@@ -151,16 +153,15 @@
 
     <ConfirmDlg ref="confirm" />
 
-    <!-- Snackbar retour synchronisation -->
     <v-snackbar v-model="calibrateSnackbar" :color="calibrateSnackbarColor" timeout="3000" location="bottom">
       {{ calibrateSnackbarText }}
     </v-snackbar>
-  </v-container>
+  </div>
 </template>
 
 <script>
 import moment from "moment"
-import ConfirmDlg from "@/components/ConfirmDlg"
+import ConfirmDlg from "@/components/ConfirmDlg.vue"
 
 export default {
   name: "Settings",
@@ -262,3 +263,13 @@ export default {
   },
 }
 </script>
+
+<style scoped>
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.72rem;
+}
+.danger-card {
+  border-color: rgba(239, 68, 68, 0.4) !important;
+}
+</style>

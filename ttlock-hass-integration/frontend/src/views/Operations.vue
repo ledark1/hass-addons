@@ -1,23 +1,30 @@
 <template>
-  <v-container v-if="lock.address">
-    <v-card class="mb-4" variant="tonal" color="primary">
-      <v-card-item>
-        <template #prepend>
-          <v-icon icon="mdi-history" size="28" />
-        </template>
-        <v-card-title>{{ lock.name }}</v-card-title>
-        <v-card-subtitle class="text-caption font-mono">{{ lock.address }}</v-card-subtitle>
-        <template #append>
-          <v-btn
-            icon="mdi-refresh"
-            variant="text"
-            color="white"
-            :loading="waitingOperations"
-            @click="refresh"
-          />
-        </template>
-      </v-card-item>
-    </v-card>
+  <div v-if="lock.address">
+    <!-- Page header -->
+    <div class="d-flex flex-wrap align-center justify-space-between mb-6 ga-3">
+      <div class="d-flex align-center ga-3">
+        <v-btn icon="mdi-arrow-left" variant="text" size="small" @click="$router.push({ name: 'Home' })" />
+        <div>
+          <h1 class="text-h5 font-weight-bold mb-0">{{ $t('operations.title') }}</h1>
+          <div class="text-caption text-medium-emphasis">
+            {{ lock.name }} · <span class="font-mono">{{ lock.address }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="d-flex align-center ga-2">
+        <v-chip variant="tonal" color="secondary" size="small">
+          {{ $t('operations.totalEntries', { count: sortedOperations.length }) }}
+        </v-chip>
+        <v-btn
+          icon="mdi-refresh"
+          variant="tonal"
+          color="primary"
+          size="small"
+          :loading="waitingOperations"
+          @click="refresh"
+        />
+      </div>
+    </div>
 
     <v-card>
       <v-data-table
@@ -26,7 +33,9 @@
         :loading="waitingOperations"
         :items-per-page="50"
         :items-per-page-options="[10, 25, 50, 100, -1]"
-        density="compact"
+        density="comfortable"
+        hover
+        class="operations-table"
       >
         <template #item.recordTypeCategory="{ item }">
           <v-icon v-if="item.recordTypeCategory === 'LOCK'" color="error" size="20">mdi-lock</v-icon>
@@ -43,11 +52,11 @@
         </template>
         <template #item.password="{ item }">
           <span v-if="item.passwordName" class="font-weight-medium">{{ item.passwordName }}</span>
-          <span v-if="item.password" class="text-caption text-grey ml-1">({{ item.password }})</span>
+          <span v-if="item.password" class="text-caption text-medium-emphasis ml-1">({{ item.password }})</span>
         </template>
       </v-data-table>
     </v-card>
-  </v-container>
+  </div>
 </template>
 
 <script>
@@ -128,3 +137,16 @@ export default {
   },
 }
 </script>
+
+<style scoped>
+.font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+.operations-table :deep(thead th) {
+  font-weight: 600 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.7rem !important;
+  color: rgb(var(--v-theme-on-surface-variant)) !important;
+}
+</style>

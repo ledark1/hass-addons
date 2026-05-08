@@ -1,47 +1,18 @@
 <template>
   <v-app>
-    <v-app-bar color="primary" :elevation="2" density="compact">
-      <v-app-bar-nav-icon @click="goHome">
-        <v-icon>{{ isHome ? 'mdi-home-automation' : 'mdi-arrow-left' }}</v-icon>
-      </v-app-bar-nav-icon>
+    <AppSidebar v-model="drawer" />
+    <AppTopBar
+      @toggle-drawer="drawer = !drawer"
+      @edit-config="editConfig"
+      @start-scan="startScan"
+      @refresh-credentials="refreshCredentials"
+    />
 
-      <v-app-bar-title>{{ $t('app.title') }}</v-app-bar-title>
+    <v-main class="bg-background">
+      <div class="page-container">
+        <router-view />
+      </div>
 
-      <template #append>
-        <template v-if="isHome">
-          <v-btn icon variant="text" color="white" :disabled="isScanning" :title="$t('app.editConfig')" @click="editConfig">
-            <v-icon>mdi-tune</v-icon>
-          </v-btn>
-          <v-progress-circular v-if="isScanning" indeterminate color="white" size="22" width="2" class="mx-2" />
-          <v-btn v-else icon variant="text" color="white" :title="$t('app.startScan')" @click="startScan">
-            <v-icon>mdi-bluetooth-connect</v-icon>
-          </v-btn>
-        </template>
-        <template v-else-if="isCredentials">
-          <v-progress-circular v-if="isWaitingCredentials" indeterminate color="white" size="22" width="2" class="mx-2" />
-          <v-btn v-else icon variant="text" color="white" :title="$t('app.refreshCredentials')" @click="refreshCredentials">
-            <v-icon>mdi-refresh</v-icon>
-          </v-btn>
-        </template>
-      </template>
-    </v-app-bar>
-
-    <v-main>
-      <v-alert
-        v-if="startupStatus !== 0"
-        :type="startupStatus === 1 ? 'error' : 'info'"
-        density="compact"
-        rounded="0"
-        class="mb-0"
-      >
-        <template #prepend>
-          <v-progress-circular v-if="startupStatus !== 1" indeterminate size="18" width="2" class="mr-1" />
-          <v-icon v-else icon="mdi-alert-circle" />
-        </template>
-        {{ startupStatusTxt }}
-      </v-alert>
-
-      <router-view />
       <ConfigDlg :show="showConfigDialog" v-on:cancel="hideConfigDialog" />
       <Errors />
       <Notices />
@@ -50,47 +21,34 @@
 </template>
 
 <script>
-import ConfigDlg from "@/components/ConfigDlg"
-import Errors from "@/components/Errors"
-import Notices from "@/components/Notices"
+import { useDisplay } from 'vuetify'
+import AppSidebar from "@/components/AppSidebar.vue"
+import AppTopBar from "@/components/AppTopBar.vue"
+import ConfigDlg from "@/components/ConfigDlg.vue"
+import Errors from "@/components/Errors.vue"
+import Notices from "@/components/Notices.vue"
 
 export default {
-  components: { ConfigDlg, Errors, Notices },
+  components: { AppSidebar, AppTopBar, ConfigDlg, Errors, Notices },
+  setup() {
+    const display = useDisplay()
+    return { display }
+  },
   data() {
     return {
-      showConfigDialog: false
+      showConfigDialog: false,
+      drawer: true,
     }
   },
-  computed: {
-    startupStatus() {
-      return this.$store.state.startupStatus
-    },
-    startupStatusTxt() {
-      switch (this.startupStatus) {
-        case 0: return this.$t('app.status.ok')
-        case 1: return this.$t('app.status.error')
-        default: return this.$t('app.status.starting')
-      }
-    },
-    isHome() {
-      return this.$route.name === "Home"
-    },
-    isCredentials() {
-      return this.$route.name === "Credentials"
-    },
-    isScanning() {
-      return this.$store.state.scanStatus == 1
-    },
-    isWaitingCredentials() {
-      return this.$store.state.waitingCredentials
+  watch: {
+    'display.smAndDown.value': {
+      immediate: true,
+      handler(isMobile) {
+        this.drawer = !isMobile
+      },
     },
   },
   methods: {
-    goHome() {
-      if (!this.isHome) {
-        this.$router.push({ name: "Home" })
-      }
-    },
     startScan() {
       this.$store.dispatch("scan")
     },
@@ -111,5 +69,24 @@ export default {
 </script>
 
 <style>
-@import url("https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap");
+.page-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+@media (max-width: 600px) {
+  .page-container {
+    padding: 16px;
+  }
+}
+
+/* Soft scrollbar tuned for both themes */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.25);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(128, 128, 128, 0.45); }
 </style>
