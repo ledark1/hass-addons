@@ -148,7 +148,9 @@ export default {
         { title: this.$t('breadcrumb.home'), to: '/', disabled: this.$route.name === 'Home' },
       ]
       if (this.$route.name === 'Settings') {
-        crumbs.push({ title: this.activeLockName, to: '/', disabled: false })
+        crumbs.push({ title: this.$t('breadcrumb.settings'), to: '/settings', disabled: false })
+        crumbs.push({ title: this.activeLockName, disabled: true })
+      } else if (this.$route.name === 'SettingsAll') {
         crumbs.push({ title: this.$t('breadcrumb.settings'), disabled: true })
       } else if (this.$route.name === 'Operations') {
         crumbs.push({ title: this.$t('breadcrumb.operations'), to: '/operations', disabled: false })

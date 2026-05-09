@@ -70,6 +70,7 @@ export default {
         { to: '/', icon: 'mdi-view-dashboard-outline', label: 'nav.dashboard', match: ['Home'] },
         { to: '/credentials', icon: 'mdi-key-chain-variant', label: 'nav.credentials', match: ['CredentialsAll', 'Credentials'] },
         { to: '/operations', icon: 'mdi-history', label: 'nav.operations', match: ['OperationsAll', 'Operations'] },
+        { to: '/settings', icon: 'mdi-tune-variant', label: 'nav.settings', match: ['SettingsAll', 'Settings'] },
       ],
     }
   },

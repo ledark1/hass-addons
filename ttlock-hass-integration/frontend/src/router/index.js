@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import Home from '../views/Home.vue'
 import Settings from '../views/Settings.vue'
+import SettingsAll from '../views/SettingsAll.vue'
 import Credentials from '../views/Credentials.vue'
 import CredentialsAll from '../views/CredentialsAll.vue'
 import Operations from '../views/Operations.vue'
@@ -11,6 +12,11 @@ const routes = [
     path: '/',
     name: 'Home',
     component: Home
+  },
+  {
+    path: '/settings',
+    name: 'SettingsAll',
+    component: SettingsAll
   },
   {
     path: '/settings/:address',

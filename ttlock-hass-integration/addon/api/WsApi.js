@@ -191,9 +191,6 @@ class WsApi {
   }
 
   static async getLocks() {
-    if (process.env.DEV_MODE) {
-      return await WsApi._devLocks();
-    }
     const newVisibleLocks = manager.getNewVisible();
     const pairedVisibleLocks = manager.getPairedVisible();
     let locks = [];

@@ -15,9 +15,6 @@ $env:GATEWAY_KEY = "49FBBE89322A42A11ED09B6FBD980ED1"   # AES key configured in 
 $env:GATEWAY_USER = "admin"            # WebSocket auth username (if any)
 $env:GATEWAY_PASS = "admin"        # WebSocket auth password (if any)
 
-# Dev mode — enables stub locks & credentials in WsApi.js
-# $env:DEV_MODE   = "1"
-
 # Create the local data folder if it doesn't exist
 if (-not (Test-Path $env:DATA_PATH)) {
     New-Item -ItemType Directory -Path $env:DATA_PATH | Out-Null

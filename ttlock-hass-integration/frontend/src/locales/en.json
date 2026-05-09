@@ -15,6 +15,7 @@
     "locks": "Locks",
     "credentials": "Credentials",
     "operations": "Activity log",
+    "settings": "Settings",
     "config": "Configuration"
   },
   "theme": {
@@ -78,7 +79,11 @@
     "unpairWarning": "Unpairing will remove all credentials stored and will reset the lock to defaults.",
     "unpair": "Unpair",
     "confirmUnpair": "Are you sure you want to unpair this lock ?",
-    "dangerZone": "Danger zone"
+    "dangerZone": "Danger zone",
+    "allTitle": "Settings",
+    "allSubtitle": "Manage auto-lock, sound and clock for each lock",
+    "selectLock": "Select a lock",
+    "noLockPaired": "No paired lock"
   },
   "credentials": {
     "pins": "Keyboard PIN",

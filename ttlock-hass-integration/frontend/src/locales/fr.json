@@ -15,6 +15,7 @@
     "locks": "Serrures",
     "credentials": "Identifiants",
     "operations": "Journal d'activité",
+    "settings": "Paramètres",
     "config": "Configuration"
   },
   "theme": {
@@ -78,7 +79,11 @@
     "unpairWarning": "Le désappairage supprimera tous les identifiants enregistrés et réinitialisera la serrure.",
     "unpair": "Désappairer",
     "confirmUnpair": "Êtes-vous sûr de vouloir désappairer cette serrure ?",
-    "dangerZone": "Zone dangereuse"
+    "dangerZone": "Zone dangereuse",
+    "allTitle": "Paramètres",
+    "allSubtitle": "Gérez le verrouillage automatique, le son et l'horloge de chaque serrure",
+    "selectLock": "Sélectionner une serrure",
+    "noLockPaired": "Aucune serrure appairée"
   },
   "credentials": {
     "pins": "Code PIN clavier",

@@ -6,16 +6,6 @@
         <h1 class="text-h5 font-weight-bold mb-1">{{ $t('dashboard.title') }}</h1>
         <div class="text-body-2 text-medium-emphasis">{{ $t('dashboard.subtitle') }}</div>
       </div>
-      <!-- <v-btn
-        v-if="locks.length > 0"
-        color="primary"
-        variant="flat"
-        prepend-icon="mdi-bluetooth-connect"
-        :loading="isScanning"
-        @click="startScan"
-      >
-        {{ $t('app.startScan') }}
-      </v-btn> -->
     </div>
 
     <!-- KPI cards -->
