@@ -374,18 +374,44 @@ class Manager extends EventEmitter {
     if (lock === undefined) {
       return { passcodes: false, cards: false, fingers: false };
     }
-    // Outer retry loop: the lock sometimes disconnects during data reads even after a
-    // successful connect+adminLogin (firmware drops the link mid-read). When that happens
-    // we release, wait briefly, and retry the full connect+read cycle rather than giving up.
+
     const MAX_READ_ATTEMPTS = 3;
-    for (let readAttempt = 1; readAttempt <= MAX_READ_ATTEMPTS; readAttempt++) {
-      if (!(await this._connectLock(lock))) {
-        return { passcodes: false, cards: false, fingers: false };
-      }
-      try {
-        // Wrap each BLE read in withTimeout: without a hard ceiling the SDK can hang
-        // forever on a flaky BLE link, leaving the per-address mutex held and every
-        // subsequent user op stuck (UI spinner spins indefinitely).
+
+    // Acquire the BLE mutex ONCE for all retry attempts.
+    // Releasing and re-acquiring between retries causes _releaseConnect to restart
+    // the monitor, which then must be stopped again before reconnecting — this
+    // BLE scan cycle adds 3-5s of latency and makes the retry unreliable.
+    if (!(await this._connectLock(lock))) {
+      return { passcodes: false, cards: false, fingers: false };
+    }
+
+    try {
+      for (let readAttempt = 1; readAttempt <= MAX_READ_ATTEMPTS; readAttempt++) {
+        // On retry: disconnect, reset adminAuth, wait, reconnect (mutex already held)
+        if (readAttempt > 1) {
+          console.warn(`getCredentials: retrying reads (attempt ${readAttempt}/${MAX_READ_ATTEMPTS})`);
+          if (lock.adminAuth !== undefined) lock.adminAuth = false;
+          if (lock.isConnected()) await lock.disconnect().catch(() => {});
+          await sleep(1500);
+          let reconnected = false;
+          for (let attempt = 1; attempt <= 4; attempt++) {
+            if (lock.isConnected() && lock.adminAuth) {
+              reconnected = true;
+              break;
+            }
+            const result = await this._connectAttempt(lock, address, true, attempt);
+            if (result === true) {
+              reconnected = true;
+              break;
+            }
+            if (attempt < 4) await sleep(attempt * 1500);
+          }
+          if (!reconnected) {
+            console.error('getCredentials: reconnect failed on retry', readAttempt);
+            return { passcodes: false, cards: false, fingers: false };
+          }
+        }
+
         const passcodes = lock.hasPassCode()
           ? await withTimeout(lock.getPassCodes(), 20000, 'getPassCodes ' + address).catch((e) => {
               console.error('getPassCodes:', e.message);
@@ -412,18 +438,20 @@ class Manager extends EventEmitter {
         if (Array.isArray(fingersRaw)) {
           for (const f of fingersRaw) f.alias = store.getFingerAlias(f.fpNumber);
         }
-        // If all reads failed and the lock disconnected mid-read, retry the whole cycle.
+
         const allFailed = (lock.hasPassCode() ? passcodes === false : false) || (lock.hasICCard() ? cardsRaw === false : false) || (lock.hasFingerprint() ? fingersRaw === false : false);
-        if (allFailed && !lock.isConnected() && readAttempt < MAX_READ_ATTEMPTS) {
-          console.warn(`getCredentials: all reads failed due to disconnect (attempt ${readAttempt}/${MAX_READ_ATTEMPTS}) — retrying`);
-          continue; // _releaseConnect called in finally, then loop re-acquires
+
+        if (!allFailed || readAttempt >= MAX_READ_ATTEMPTS) {
+          return { passcodes, cards, fingers };
         }
-        return { passcodes, cards, fingers };
-      } finally {
-        this._releaseConnect(address);
+
+        console.warn(`getCredentials: all reads failed (attempt ${readAttempt}/${MAX_READ_ATTEMPTS}) — will retry`);
       }
+      return { passcodes: false, cards: false, fingers: false };
+    } finally {
+      // Single release covers all retry attempts — monitor restarts once here
+      this._releaseConnect(address);
     }
-    return { passcodes: false, cards: false, fingers: false };
   }
 
   async addPasscode(address, type, passCode, startDate, endDate) {
@@ -454,11 +482,7 @@ class Manager extends EventEmitter {
       const ok = await lock.addPassCode(type, passCode, startDate, endDate);
       if (!ok) {
         const detail = lock.lastPasscodeError;
-        console.error(
-          '[diag] addPassCode rejected by lock:',
-          detail ? detail.message : '(no detail — likely admin login or BLE issue)',
-          'connected:', lock.isConnected()
-        );
+        console.error('[diag] addPassCode rejected by lock:', detail ? detail.message : '(no detail — likely admin login or BLE issue)', 'connected:', lock.isConnected());
         return false;
       }
       return await lock.getPassCodes();
@@ -1027,16 +1051,10 @@ class Manager extends EventEmitter {
   async _connectAttempt(lock, address, needsAdmin, attempt) {
     try {
       console.log(`Connect attempt ${attempt}/4 to ${address}`);
-      // Use connect(false) — full handshake including searchDeviceFeatureCommand.
-      // This lock firmware requires searchDeviceFeatureCommand to complete before it
-      // will accept checkAdminCommand (macro_adminLogin). Using connect(true)/skipDataRead
-      // caused macro_adminLogin to ALWAYS disconnect the lock (100% failure rate).
       const res = await withTimeout(lock.connect(false), 15000, 'connect ' + address);
       if (!res) {
-        // The TTLock self-disconnects mid-handshake under load. After the SDK returns false
-        // the BLE stack may still be cleaning up — make sure it's idle before retrying.
         if (lock.connecting) {
-          let wait = 30; // up to 3s
+          let wait = 30;
           while (lock.connecting && wait > 0) {
             await sleep(100);
             wait--;
@@ -1046,33 +1064,26 @@ class Manager extends EventEmitter {
         return false;
       }
       console.log('Connected to', address);
-      // Yield the event loop once before proceeding. When connect(false) returns, the
-      // SDK's onConnected() has fully completed (searchDeviceFeatureCommand + its internal
-      // macro_adminLogin). The firmware sometimes issues a BLE disconnect immediately after
-      // that handshake. Without this yield, the disconnect event hasn't had a chance to
-      // propagate to lock.connected yet — we'd receive a "connected" session that is already
-      // dead, causing every subsequent read to fail and the caller to loop.
       await sleep(50);
       if (!lock.isConnected()) {
         console.warn('Lock self-disconnected right after onConnected', address, '— retrying');
         return attempt < 4 ? 'retry' : false;
       }
-      // If the SDK's onConnected() didn't call macro_adminLogin (because autoLockTime
-      // was not -1), and this operation requires admin auth, call it manually now.
-      if (needsAdmin && !lock.adminAuth) {
+      // Always call _doAdminLogin when needsAdmin, even if lock.adminAuth===true.
+      // The SDK's internal macro_adminLogin (called during connect(false)/onConnected)
+      // sets lock.adminAuth=true even when the firmware session is not actually valid
+      // (e.g. after a previous disconnect mid-auth). Relying on lock.adminAuth to skip
+      // our own check causes getPassCodes to fail with NO_PERMISSION (code=0x01).
+      if (needsAdmin) {
+        // Reset stale SDK-set adminAuth so _doAdminLogin runs a fresh checkAdmin
+        lock.adminAuth = false;
         const adminResult = await this._doAdminLogin(lock, address, attempt);
         if (adminResult === 'retry') {
-          // Force a clean disconnect: otherwise _connectLock's `if (lock.isConnected()) return true;`
-          // short-circuit would reuse this half-open (connected but no adminAuth) session on
-          // the next iteration, and every getPassCodes/getICCards/getFingerprints would fail
-          // with "No response to checkAdmin" because the SDK retries macro_adminLogin internally
-          // on the same poisoned BLE link.
           if (lock.isConnected()) await lock.disconnect().catch(() => {});
           return 'retry';
         }
         if (adminResult === 'abort') return false;
       }
-      // Final sanity check after _doAdminLogin.
       if (!lock.isConnected()) {
         console.warn('Lock disconnected just after adminLogin', address, '— retrying');
         return attempt < 4 ? 'retry' : false;
@@ -1080,6 +1091,8 @@ class Manager extends EventEmitter {
       return true;
     } catch (error) {
       console.error(`Connect attempt ${attempt}/4 error:`, error.message);
+      // Reset stale adminAuth so the next attempt doesn't skip macro_adminLogin
+      if (lock.adminAuth !== undefined) lock.adminAuth = false;
       return false;
     }
   }
