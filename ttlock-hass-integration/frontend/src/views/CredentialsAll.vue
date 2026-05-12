@@ -74,7 +74,7 @@ export default {
   watch: {
     pairedLocks(newVal) {
       // If the previously selected lock disappeared (unpaired), pick the first available
-      if (this.selectedAddress && !newVal.find(l => l.address === this.selectedAddress)) {
+      if (this.selectedAddress && !newVal.some(l => l.address === this.selectedAddress)) {
         this.selectedAddress = newVal[0]?.address || null
       } else if (!this.selectedAddress && newVal.length > 0) {
         this.selectedAddress = newVal[0].address

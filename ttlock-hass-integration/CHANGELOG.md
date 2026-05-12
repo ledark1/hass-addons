@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.9.0] - 2026-05-12
+
+### Corrections
+
+- **Connexion admin (adminLogin)** : réinitialisation systématique de `lock.adminAuth` avant chaque `_doAdminLogin`
+  - `manager.js` : le SDK positionnait `adminAuth=true` lors de `connect(false)/onConnected` même quand la session firmware n'était plus valide (déconnexion en pleine auth). Skipper `_doAdminLogin` sur une session périmée provoquait `NO_PERMISSION (0x01)` sur les lectures/écritures (notamment `getPassCodes`)
+  - `manager.js` : `adminAuth` également réinitialisé dans le `catch` pour ne pas court-circuiter la macro à la tentative suivante
+- **Ajout PIN** : refresh fiable de la liste après écriture
+  - `manager.js` : `addPasscode` attend désormais 1.5 s puis tente jusqu'à 3 fois la lecture `getPassCodes` (avec reconnexion si la serrure s'est déconnectée). Évite de renvoyer une liste vide à l'UI quand l'index firmware n'est pas encore prêt
+- **Persistance store** : sauvegardes JSON robustes face aux verrous Windows
+  - `store.js` : nouveau helper `fileDataRename` qui retente le `fs.rename` jusqu'à 3 fois en cas d'`EPERM` (antivirus / indexeur qui tient le `.tmp`). Appliqué à `lockData`, `aliasData` et `deviceInfoData`
+- **SDK TTLock** : bump `@domodom30/ttlock-sdk-js` `^0.6.0` → `^0.6.3`
+- **Frontend** : `CredentialsAll.vue` et `SettingsAll.vue` utilisent `Array.some()` (SonarQube) à la place de `Array.find()` pour la détection d'une serrure dépairée
+- **Frontend** : interface Réglages et Identifiants rafraîchies
+- **Dev mode** : `api/index.js` honore `process.env.DEV_MODE` pour `handleCredentials`/`handlePasscode`/`handleCard`/`handleFinger` (mock via `WsApi._devSendCredentials`)
+
 ## [1.4.0] - 2026-04-27
 
 ### Corrections

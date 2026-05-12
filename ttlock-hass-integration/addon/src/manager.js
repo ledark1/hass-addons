@@ -479,13 +479,57 @@ class Manager extends EventEmitter {
         console.warn('[diag] pre-add getPassCodes failed:', e.message);
       }
       console.log('addPasscode → addPassCode', { type, passCode });
+
       const ok = await lock.addPassCode(type, passCode, startDate, endDate);
       if (!ok) {
         const detail = lock.lastPasscodeError;
         console.error('[diag] addPassCode rejected by lock:', detail ? detail.message : '(no detail — likely admin login or BLE issue)', 'connected:', lock.isConnected());
         return false;
       }
-      return await lock.getPassCodes();
+
+      // Give the firmware time to persist the new passcode before reading back.
+      // Without this delay getPassCodes returns an empty list immediately after the write.
+      await sleep(1500);
+
+      for (let readAttempt = 1; readAttempt <= 3; readAttempt++) {
+        if (!lock.isConnected()) {
+          console.warn(`addPasscode: lock disconnected after write — reconnecting for getPassCodes (attempt ${readAttempt}/3)`);
+          if (lock.adminAuth !== undefined) lock.adminAuth = false;
+          await sleep(1000);
+          let reconnected = false;
+          for (let attempt = 1; attempt <= 4; attempt++) {
+            const result = await this._connectAttempt(lock, address, true, attempt);
+            if (result === true) {
+              reconnected = true;
+              break;
+            }
+            if (attempt < 4) await sleep(attempt * 1500);
+          }
+          if (!reconnected) {
+            console.error('addPasscode: reconnect failed — cannot refresh passcode list');
+            return null;
+          }
+        }
+        try {
+          const passcodes = await withTimeout(lock.getPassCodes(), 15000, 'getPassCodes after add ' + address);
+          console.log('[diag] getPassCodes after add:', Array.isArray(passcodes) ? passcodes.length : passcodes);
+          // Firmware index not ready yet — wait and retry rather than sending empty list to UI
+          if (Array.isArray(passcodes) && passcodes.length === 0 && readAttempt < 3) {
+            console.warn(`addPasscode: getPassCodes returned empty (attempt ${readAttempt}/3) — retrying`);
+            await sleep(2000);
+            continue;
+          }
+          return passcodes;
+        } catch (e) {
+          console.warn(`addPasscode: getPassCodes attempt ${readAttempt}/3 failed:`, e.message);
+          if (readAttempt >= 3) {
+            console.error('addPasscode: all getPassCodes retries exhausted — returning null');
+            return null;
+          }
+          await sleep(2000);
+        }
+      }
+      return null;
     } catch (error) {
       console.error('addPasscode error:', error);
       return false;
@@ -1069,13 +1113,12 @@ class Manager extends EventEmitter {
         console.warn('Lock self-disconnected right after onConnected', address, '— retrying');
         return attempt < 4 ? 'retry' : false;
       }
-      // Always call _doAdminLogin when needsAdmin, even if lock.adminAuth===true.
-      // The SDK's internal macro_adminLogin (called during connect(false)/onConnected)
-      // sets lock.adminAuth=true even when the firmware session is not actually valid
-      // (e.g. after a previous disconnect mid-auth). Relying on lock.adminAuth to skip
-      // our own check causes getPassCodes to fail with NO_PERMISSION (code=0x01).
       if (needsAdmin) {
-        // Reset stale SDK-set adminAuth so _doAdminLogin runs a fresh checkAdmin
+        // Always reset adminAuth: the SDK's internal macro_adminLogin sets
+        // lock.adminAuth=true during connect(false)/onConnected even when the
+        // firmware session is not actually valid (e.g. after a dropped mid-auth).
+        // Skipping _doAdminLogin on a stale session causes every write/read
+        // command to fail with NO_PERMISSION (code=0x01).
         lock.adminAuth = false;
         const adminResult = await this._doAdminLogin(lock, address, attempt);
         if (adminResult === 'retry') {
@@ -1091,7 +1134,7 @@ class Manager extends EventEmitter {
       return true;
     } catch (error) {
       console.error(`Connect attempt ${attempt}/4 error:`, error.message);
-      // Reset stale adminAuth so the next attempt doesn't skip macro_adminLogin
+      // Reset so the next attempt doesn't skip macro_adminLogin on a stale session
       if (lock.adminAuth !== undefined) lock.adminAuth = false;
       return false;
     }

@@ -26,6 +26,11 @@ async function handleLockOrUnlock(wss, msg, op) {
 async function handleCredentials(api, ws, msg) {
   if (!msg.data?.address) return;
 
+  if (process.env.DEV_MODE) {
+    WsApi._devSendCredentials(ws);
+    return;
+  }
+
   const credentials = await manager.getCredentials(msg.data.address);
   if (!credentials) {
     api.sendError('Failed fetching credentials', msg);
@@ -36,6 +41,11 @@ async function handleCredentials(api, ws, msg) {
 
 async function handlePasscode(api, ws, msg) {
   if (!msg.data?.address || !msg.data?.passcode) return;
+
+  if (process.env.DEV_MODE) {
+    WsApi._devSendCredentials(ws);
+    return;
+  }
 
   const passcode = msg.data.passcode;
   console.log('passcode operation received:', JSON.stringify(passcode));
@@ -98,6 +108,11 @@ async function handlePasscode(api, ws, msg) {
 async function handleCard(api, ws, msg) {
   if (!msg.data?.address || !msg.data?.card) return;
 
+  if (process.env.DEV_MODE) {
+    WsApi._devSendCredentials(ws);
+    return;
+  }
+
   const card = msg.data.card;
   const address = msg.data.address;
   // Each manager method now returns the updated cards array on success, or false on failure.
@@ -130,6 +145,11 @@ async function handleCard(api, ws, msg) {
 
 async function handleFinger(api, ws, msg) {
   if (!msg.data?.address || !msg.data?.finger) return;
+
+  if (process.env.DEV_MODE) {
+    WsApi._devSendCredentials(ws);
+    return;
+  }
 
   const finger = msg.data.finger;
   const address = msg.data.address;

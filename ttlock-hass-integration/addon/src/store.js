@@ -125,25 +125,40 @@ class Store {
     return this.lockData;
   }
 
+  async fileDataRename(src, dest) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await fs.rename(src, dest);
+        return;
+      } catch (err) {
+        if (err.code === 'EPERM' && attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 100 * attempt));
+        } else {
+          throw err;
+        }
+      }
+    }
+  }
+
   async saveData() {
     try {
       const tmpLock = this.settingsPath + '/lockData.json.tmp';
       await fs.writeFile(tmpLock, Buffer.from(JSON.stringify(this.lockData)));
-      await fs.rename(tmpLock, this.settingsPath + '/lockData.json');
+      await this.fileDataRename(tmpLock, this.settingsPath + '/lockData.json');
     } catch (error) {
       console.error(error);
     }
     try {
       const tmpAlias = this.settingsPath + '/aliasData.json.tmp';
       await fs.writeFile(tmpAlias, Buffer.from(JSON.stringify(this.aliasData)));
-      await fs.rename(tmpAlias, this.settingsPath + '/aliasData.json');
+      await this.fileDataRename(tmpAlias, this.settingsPath + '/aliasData.json');
     } catch (error) {
       console.error(error);
     }
     try {
       const tmpDeviceInfo = this.settingsPath + '/deviceInfoData.json.tmp';
       await fs.writeFile(tmpDeviceInfo, Buffer.from(JSON.stringify(this.deviceInfoData)));
-      await fs.rename(tmpDeviceInfo, this.settingsPath + '/deviceInfoData.json');
+      await this.fileDataRename(tmpDeviceInfo, this.settingsPath + '/deviceInfoData.json');
     } catch (error) {
       console.error(error);
     }
