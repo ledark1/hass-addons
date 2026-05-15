@@ -176,6 +176,10 @@ export default {
   created() {
     // Default: all paired locks selected
     this.selectedLockAddresses = this.pairedLocks.map(l => l.address)
+    // Auto-load the activity log so the view is never empty without clicking
+    // "Refresh all" — the backend serves the cached lockData.json entries
+    // immediately (no BLE round-trip required).
+    this.autoLoad(this.pairedLocks)
   },
   watch: {
     pairedLocks(newVal) {
@@ -186,9 +190,19 @@ export default {
       if (this.selectedLockAddresses.length === 0 && newVal.length > 0) {
         this.selectedLockAddresses = newVal.map(l => l.address)
       }
+      // Locks can arrive after created() (WS status race / late BLE
+      // discovery): load any that have no operations cached yet.
+      this.autoLoad(newVal)
     },
   },
   methods: {
+    autoLoad(locks) {
+      for (const lock of locks) {
+        if (!this.$store.state.operations[lock.address]) {
+          this.$store.dispatch("readOperations", lock.address)
+        }
+      }
+    },
     refreshAll() {
       // The BLE mutex on the backend serialises operations — dispatching them all
       // at once is safe; the store will set waitingOperations once and the spinner
