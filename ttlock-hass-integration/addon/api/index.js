@@ -328,6 +328,7 @@ export default async function initApi(server) {
   manager.on('scanStart', sendStatusUpdate);
   manager.on('scanStop', sendStatusUpdate);
   manager.on('adapterReady', sendStatusUpdate);
+  manager.on('gatewayStatusChanged', sendStatusUpdate);
 
   wss.on('connection', (ws) => {
     const api = new WsApi(ws);

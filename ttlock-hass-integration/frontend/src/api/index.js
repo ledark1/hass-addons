@@ -299,6 +299,12 @@ class Api {
     if (data.scan !== undefined) {
       this.store.commit('setScanStatus', data.scan);
     }
+    if (data.gateway !== undefined) {
+      this.store.commit('setGatewayStatus', data.gateway);
+    }
+    if (data.gatewayHost !== undefined) {
+      this.store.commit('setGatewayHost', data.gatewayHost);
+    }
     if (data.locks !== undefined) {
       this.store.commit('setLocks', data.locks);
     }

@@ -8,6 +8,13 @@
       "ok": "Tout est opérationnel",
       "error": "Démarrage terminé avec des erreurs",
       "starting": "Démarrage en cours…"
+    },
+    "gateway": {
+      "label": "Gateway",
+      "connected": "Gateway noble connecté — {host}",
+      "connecting": "Connexion au gateway noble en cours…",
+      "disconnected": "Gateway noble déconnecté — les serrures ne sont pas joignables",
+      "unknown": "État du gateway noble indisponible"
     }
   },
   "nav": {

@@ -57,6 +57,28 @@
           </template>
         </v-tooltip>
 
+        <v-tooltip v-if="showGatewayChip" :text="gatewayStatusTxt" location="bottom">
+          <template #activator="{ props }">
+            <v-chip
+              v-bind="props"
+              :color="gatewayChipColor"
+              variant="tonal"
+              size="small"
+              class="mr-1"
+            >
+              <v-progress-circular
+                v-if="gatewayStatus === 'connecting'"
+                indeterminate
+                size="14"
+                width="2"
+                class="mr-1"
+              />
+              <v-icon v-else start size="14">{{ gatewayIcon }}</v-icon>
+              {{ $t('app.gateway.label') }}
+            </v-chip>
+          </template>
+        </v-tooltip>
+
         <v-tooltip :text="$t('app.editConfig')" location="bottom">
           <template #activator="{ props }">
             <v-btn
@@ -127,6 +149,41 @@ export default {
     },
     startupStatusShort() {
       return this.startupStatus === 1 ? '!' : '...'
+    },
+    gatewayStatus() {
+      return this.$store.state.gatewayStatus
+    },
+    gatewayHost() {
+      return this.$store.state.gatewayHost
+    },
+    // Always show the chip when a gateway is configured (status !== 'n/a').
+    // Connected = discreet success chip with the IP on hover; otherwise it
+    // surfaces in warning/error so the problem is visible at a glance.
+    showGatewayChip() {
+      return this.gatewayStatus !== 'n/a' && this.gatewayStatus !== ''
+    },
+    gatewayChipColor() {
+      switch (this.gatewayStatus) {
+        case 'connected': return 'success'
+        case 'disconnected': return 'error'
+        default: return 'warning'
+      }
+    },
+    gatewayIcon() {
+      switch (this.gatewayStatus) {
+        case 'connected': return 'mdi-lan-connect'
+        case 'disconnected': return 'mdi-lan-disconnect'
+        default: return 'mdi-help-network'
+      }
+    },
+    gatewayStatusTxt() {
+      switch (this.gatewayStatus) {
+        case 'connected': return this.$t('app.gateway.connected', { host: this.gatewayHost })
+        case 'connecting': return this.$t('app.gateway.connecting')
+        case 'disconnected': return this.$t('app.gateway.disconnected')
+        case 'unknown': return this.$t('app.gateway.unknown')
+        default: return ''
+      }
     },
     isScanning() {
       return this.$store.state.scanStatus == 1

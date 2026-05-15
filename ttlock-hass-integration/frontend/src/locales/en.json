@@ -8,6 +8,13 @@
       "ok": "All systems ready",
       "error": "Startup completed with errors",
       "starting": "Starting…"
+    },
+    "gateway": {
+      "label": "Gateway",
+      "connected": "Noble gateway connected — {host}",
+      "connecting": "Connecting to the noble gateway…",
+      "disconnected": "Noble gateway disconnected — locks are unreachable",
+      "unknown": "Noble gateway status unavailable"
     }
   },
   "nav": {

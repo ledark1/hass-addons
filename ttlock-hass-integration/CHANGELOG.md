@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.9.10] - 2026-05-15
+
+### Gateway noble : UI, reprise du monitor, fail-fast
+
+- **Puce gateway toujours visible** : quand un gateway noble est configuré, la puce reste affichée en permanence — verte (`success`) avec `host:port` au survol quand le lien est connecté, en `warning`/`error` sinon (`AppTopBar.vue`). Le backend expose `gatewayHost` dans le payload `status` (`manager.getGatewayHost()`, `WsApi.js`) ; le frontend le stocke (`store`, `api`) et l'affiche dans l'infobulle (locales fr/en : `app.gateway.connected`)
+- **Reprise fiable du monitor BLE** : `_recoverMonitor` remplacé par `_ensureMonitoring()` + watchdog périodique (20 s). Corrige le `monitor BLE redémarré: false` : `TTLockClient.stopMonitor()` ne réinitialisait pas le flag interne `monitoring`, donc `startMonitor()` repartait toujours en `false` et le scan restait mort jusqu'à un scan manuel. Le nouveau code détecte cet état bloqué, réinitialise les flags internes du SDK (couplage documenté, feature-detected) et vérifie réellement `isMonitoring()` avec retries. Le watchdog couvre aussi les `startMonitor()` silencieusement faux de `_onScanStopped`/`_onLockDisconnected`
+- **Fail-fast des opérations BLE quand le gateway est déconnecté** : `_connectLock` attend brièvement la reconnexion (≤6 s) puis abandonne proprement au lieu d'enchaîner 4 tentatives × backoff vouées à `Disconnected while waiting for response` ; sortie anticipée de la boucle si le lien tombe en cours. Gardes scoppées au mode noble — aucun impact sur le BLE local
+
+## [1.9.9] - 2026-05-15
+
+### Améliorations gateway noble (WebSocket)
+
+- **Robustesse des erreurs** : `index.js` remplace le handler `uncaughtException` basé sur un match de chaîne exact (fragile, message trompeur « retrying… » alors que l'addon ne retentait rien) par une détection ciblée de la classe d'erreurs de connexion récupérables (fragment de message OU code errno). Ajout d'un handler `unhandledRejection` symétrique. Avertissement throttlé (max 1/30 s) et message corrigé : c'est le `reconnecting-websocket` du SDK qui retente
+- **Validation de configuration** : `init.js` normalise et valide les options noble avant `setNobleGateway` — `gateway_port` est coercé en nombre (il arrivait en chaîne depuis l'environnement), `gateway_host`/`gateway_key`/`gateway_user`/`gateway_pass` sont contrôlés et toute valeur manquante ou invalide est signalée explicitement (le SDK retombait silencieusement sur des défauts codés en dur, dont `admin`/`admin`)
+- **État du lien dans l'UI** : `manager.js` observe le `reconnecting-websocket` du SDK (open/close/error) et expose `gatewayStatus` (`connecting`/`connected`/`disconnected`/`unknown`). Diffusé dans le payload `status` (`WsApi.js`, `api/index.js`) ; le frontend (`store`, `api`, `AppTopBar.vue`, locales fr/en) affiche une puce d'alerte quand le gateway n'est pas connecté. Détection 100 % défensive : dégradation en `unknown` si la structure interne du SDK change, jamais de crash
+- **Watchdog de reprise du monitoring** : sur reconnexion du gateway, `manager.js` relance le monitor BLE (`stopMonitor` puis `startMonitor`, avec une nouvelle tentative). Le SDK ne réémettait pas la commande de scan après une reconnexion silencieuse — le scan restait donc mort jusqu'au prochain redémarrage. Recovery débouncée et différée si une opération serrure est en cours
+
 ## [1.9.0] - 2026-05-12
 
 ### Corrections

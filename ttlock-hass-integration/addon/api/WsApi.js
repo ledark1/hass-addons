@@ -36,6 +36,8 @@ class WsApi {
     message.setData({
       startup: manager.getStartupStatus(),
       scan: manager.getIsScanning() ? 1 : 0,
+      gateway: manager.getGatewayStatus(),
+      gatewayHost: manager.getGatewayHost(),
       locks: await WsApi.getLocks()
     });
     for (let ws of wss.clients) {

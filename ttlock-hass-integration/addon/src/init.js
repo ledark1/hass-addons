@@ -5,6 +5,52 @@ import express from 'express';
 import api from '../api/index.js';
 
 /**
+ * Validate and normalise the noble-gateway options.
+ *
+ * The SDK silently falls back to hard-coded defaults for any missing field
+ * (AES key `f8b55c…`, user/pass `admin`/`admin`), so a typo in the addon
+ * config produces a confusing "connects but unauthorised" failure instead of a
+ * clear error. We surface the problem loudly here but still proceed: refusing
+ * to start would also break setups that intentionally rely on the SDK
+ * defaults. The port is coerced to a number (it arrives as a string from the
+ * environment) so it cannot silently become `NaN` downstream.
+ * @param {Object} options
+ * @returns {{host:string, port:number, key:string, user:string, pass:string}}
+ */
+function normaliseNobleOptions(options) {
+  const problems = [];
+
+  const host = String(options.gateway_host ?? '').trim();
+  if (!host) problems.push('gateway_host est vide');
+
+  const port = Number.parseInt(options.gateway_port, 10);
+  const validPort = Number.isInteger(port) && port > 0 && port < 65536;
+  if (!validPort) problems.push(`gateway_port invalide (${options.gateway_port})`);
+
+  const key = String(options.gateway_key ?? '').trim();
+  if (!key) problems.push('gateway_key est vide — la clé AES par défaut du SDK sera utilisée');
+  else if (!/^[0-9a-fA-F]+$/.test(key) || key.length % 2 !== 0) problems.push('gateway_key n\'est pas une chaîne hexadécimale valide');
+
+  const user = String(options.gateway_user ?? '').trim();
+  const pass = String(options.gateway_pass ?? '').trim();
+  if (!user || !pass) problems.push('gateway_user/gateway_pass vide — identifiants par défaut du SDK (admin/admin)');
+
+  if (problems.length) {
+    console.warn('[Gateway] Configuration noble incomplète ou invalide :');
+    for (const p of problems) console.warn('  - ' + p);
+    console.warn('[Gateway] Le SDK utilisera ses valeurs par défaut pour les champs manquants — corrigez la configuration de l\'addon si la connexion échoue.');
+  }
+
+  return {
+    host: host || '127.0.0.1',
+    port: validPort ? port : 2846,
+    key,
+    user,
+    pass
+  };
+}
+
+/**
  * Handle the initialisation process
  * - load saved data
  * - create manager
@@ -14,8 +60,9 @@ import api from '../api/index.js';
  * @param {string} options.mqttHost MQTT host
  * @param {string} options.mqttPort MQTT port
  * @param {string} options.mqttSSL MQTT ssl
- * @param {string} options.mqttUser MQTT username
- * @param {string} options.mqttPass MQTT password
+ * @param {string} options.mqttUser MQTT username (optional — anonymous broker supported)
+ * @param {string} options.mqttPass MQTT password (optional — anonymous broker supported)
+ * @param {string} options.discovery_prefix Home Assistant MQTT discovery prefix
  * @param {'none'|'noble'} options.gateway External BLE gateway type
  * @param {string} options.gateway_host Gateway hostname or IP
  * @param {number} options.gateway_port Gateway port
@@ -32,13 +79,18 @@ export default async function init(options = {}) {
 
   // initialize manager
   if (options.gateway === 'noble') {
-    manager.setNobleGateway(options.gateway_host, options.gateway_port, options.gateway_key, options.gateway_user, options.gateway_pass);
+    const g = normaliseNobleOptions(options);
+    manager.setNobleGateway(g.host, g.port, g.key, g.user, g.pass);
   }
-  if (options.mqttHost && options.mqttUser && options.mqttPass) {
+  if (options.mqttHost) {
+    const useSSL = options.mqttSSL === 'true';
+    const mqttPort = options.mqttPort || (useSSL ? 8883 : 1883);
     const haOptions = {
-      mqttUrl: (options.mqttSSL === 'true' ? 'mqtts://' : 'mqtt://') + options.mqttHost + ':' + options.mqttPort,
-      mqttUser: options.mqttUser,
-      mqttPass: options.mqttPass
+      mqttUrl: (useSSL ? 'mqtts://' : 'mqtt://') + options.mqttHost + ':' + mqttPort,
+      // undefined (not '') so mqtt.js connects anonymously when no auth is set
+      mqttUser: options.mqttUser || undefined,
+      mqttPass: options.mqttPass || undefined,
+      discovery_prefix: options.discovery_prefix || undefined
     };
     const ha = new HomeAssistant(haOptions);
     await ha.connect();

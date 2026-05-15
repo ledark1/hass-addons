@@ -1,6 +1,6 @@
 {
   "name": "TTLock",
-  "version": "1.9.7",
+  "version": "1.9.10",
   "slug": "ttlock-hass-integration",
   "description": "Integration of the offline TTLock SDK into Home Assistant",
   "url": "https://github.com/domodom30/hass-addons",
@@ -18,10 +18,12 @@
   "services": ["mqtt:want"],
   "options": {
     "gateway": "none",
-    "ignore_crc": true
+    "ignore_crc": true,
+    "discovery_prefix": "homeassistant"
   },
   "schema": {
     "gateway": "match(^none|noble$)",
+    "discovery_prefix": "str?",
     "gateway_host": "str?",
     "gateway_port": "port?",
     "gateway_key": "str?",

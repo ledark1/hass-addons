@@ -1,15 +1,55 @@
 import manager from './src/manager.js';
 import init from './src/init.js';
 
-// Catch errors from noble
-process.on('uncaughtException', (error, promise) => {
-  if (error?.message?.includes('WebSocket was closed before the connection was established')) {
-    console.warn('[Gateway] Unable to connect to the gateway (ESP/noble) — retrying...');
+/**
+ * Recognise the class of transient WebSocket connection errors raised when the
+ * noble gateway (ESP / ttlock-gateway) is unreachable or drops mid-handshake.
+ * The SDK wraps the socket in `reconnecting-websocket`, so these are recoverable:
+ * the SDK keeps retrying on its own. We only need to keep the process alive and
+ * avoid flagging a fatal startup error. Matching is intentionally broad (message
+ * fragment OR errno code) so a `ws` version bump doesn't silently break it.
+ * @param {any} error
+ */
+function isRecoverableGatewayError(error) {
+  const msg = String(error?.message ?? error ?? '');
+  const code = error?.code;
+  return (
+    /WebSocket.*clos|closed before the connection|WebSocket is not open/i.test(msg) ||
+    ['ECONNREFUSED', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH', 'ENOTFOUND', 'ECONNRESET'].includes(code)
+  );
+}
+
+// Throttle the gateway-unreachable warning: reconnecting-websocket retries with
+// backoff and each failed attempt can surface here, so log at most once/30s.
+let lastGatewayWarn = 0;
+function warnGatewayUnreachable() {
+  const now = Date.now();
+  if (now - lastGatewayWarn < 30000) return;
+  lastGatewayWarn = now;
+  console.warn('[Gateway] Connexion au gateway (ESP/noble) indisponible — le client WebSocket du SDK retentera automatiquement (backoff).');
+}
+
+// The reconnecting-websocket connect failure surfaces either as an
+// uncaughtException or an unhandledRejection depending on timing. Treat the
+// recoverable gateway case as non-fatal in BOTH; keep the original fatal
+// behaviour for anything genuinely unexpected.
+process.on('uncaughtException', (error) => {
+  if (isRecoverableGatewayError(error)) {
+    warnGatewayUnreachable();
     return;
   }
-  console.error('uncaughtException catch:', promise);
+  console.error('uncaughtException catch:');
   console.error(error);
   manager.startupStatus = 1;
+});
+
+process.on('unhandledRejection', (reason) => {
+  if (isRecoverableGatewayError(reason)) {
+    warnGatewayUnreachable();
+    return;
+  }
+  console.error('unhandledRejection catch:');
+  console.error(reason);
 });
 
 init({
@@ -20,6 +60,7 @@ init({
   mqttSSL: process.env.MQTT_SSL,
   mqttUser: process.env.MQTT_USER,
   mqttPass: process.env.MQTT_PASS,
+  discovery_prefix: process.env.MQTT_DISCOVERY_PREFIX,
   gateway: process.env.GATEWAY || 'none',
   gateway_host: process.env.GATEWAY_HOST || '127.0.0.1',
   gateway_port: process.env.GATEWAY_PORT || 2846,

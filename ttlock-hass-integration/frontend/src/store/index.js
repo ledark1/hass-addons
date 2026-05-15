@@ -9,6 +9,12 @@ const store = createStore({
     ready: false,
     startupStatus: -1,
     scanStatus: 0,
+    // Health of the noble websocket gateway link (backend `gateway` field):
+    // 'n/a' (no gateway configured), 'connecting', 'connected',
+    // 'disconnected', 'unknown'.
+    gatewayStatus: 'n/a',
+    // `host:port` of the configured noble gateway, '' in local BLE mode.
+    gatewayHost: '',
     locks: [],
     passcodes: {},
     cards: {},
@@ -39,6 +45,12 @@ const store = createStore({
     },
     setScanStatus(state, status) {
       state.scanStatus = status;
+    },
+    setGatewayStatus(state, status) {
+      state.gatewayStatus = status;
+    },
+    setGatewayHost(state, host) {
+      state.gatewayHost = host;
     },
     setLocks(state, locks) {
       state.locks = locks;

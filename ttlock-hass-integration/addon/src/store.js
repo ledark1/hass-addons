@@ -15,8 +15,38 @@ class Store {
     return this.settingsPath;
   }
 
+  /**
+   * Returns true if a lockData entry carries complete admin credentials.
+   * Mirrors the SDK's TTLock.isPaired() so a degraded entry (emitted during a
+   * failed connect or a spurious lockReset) is recognised and never allowed to
+   * overwrite good credentials on disk.
+   * @param {any} entry
+   */
+  _isPairedEntry(entry) {
+    const pd = entry && entry.privateData;
+    return !!(pd && pd.aesKey && pd.admin && pd.admin.adminPs && pd.admin.unlockKey);
+  }
+
   setLockData(newData) {
-    this.lockData = Array.isArray(newData) ? newData : [];
+    const incoming = Array.isArray(newData) ? newData : [];
+    // Guard against credential loss: the SDK emits updatedLockData on both
+    // dataUpdated AND lockReset, and an entry observed mid-failed-connect can
+    // be missing its admin block. Without this check a single degraded emit
+    // would overwrite lockData.json and permanently break checkAdmin.
+    const prevByAddress = new Map();
+    for (const entry of this.lockData) {
+      if (entry && entry.address) prevByAddress.set(entry.address, entry);
+    }
+    this.lockData = incoming.map((entry) => {
+      if (this._isPairedEntry(entry)) return entry;
+      const prev = entry && entry.address ? prevByAddress.get(entry.address) : undefined;
+      if (prev && this._isPairedEntry(prev)) {
+        console.warn(`Refusing to persist degraded lockData for ${entry && entry.address} — keeping previous credentials`);
+        return prev;
+      }
+      // No valid prior entry (e.g. a brand-new lock still mid-pairing) — keep as-is.
+      return entry;
+    });
     this.saveData();
   }
 
@@ -142,9 +172,17 @@ class Store {
 
   async saveData() {
     try {
-      const tmpLock = this.settingsPath + '/lockData.json.tmp';
+      const lockPath = this.settingsPath + '/lockData.json';
+      const tmpLock = lockPath + '.tmp';
+      // Keep one generation of backup so credentials are recoverable if a
+      // degraded write ever slips through (manual restore of lockData.json.bak).
+      try {
+        await fs.copyFile(lockPath, lockPath + '.bak');
+      } catch (error) {
+        if (error.code !== 'ENOENT') console.warn('lockData.json backup failed:', error.message);
+      }
       await fs.writeFile(tmpLock, Buffer.from(JSON.stringify(this.lockData)));
-      await this.fileDataRename(tmpLock, this.settingsPath + '/lockData.json');
+      await this.fileDataRename(tmpLock, lockPath);
     } catch (error) {
       console.error(error);
     }

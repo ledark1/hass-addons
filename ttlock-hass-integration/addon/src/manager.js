@@ -75,6 +75,23 @@ class Manager extends EventEmitter {
     this.gateway_key = '';
     this.gateway_user = '';
     this.gateway_pass = '';
+    /**
+     * Health of the link to the noble websocket gateway, surfaced to the UI.
+     * 'n/a' when no gateway is configured (local BLE adapter), 'unknown' when
+     * the SDK internals could not be reached to observe it.
+     * @type {'n/a'|'connecting'|'connected'|'disconnected'|'unknown'}
+     */
+    this.gatewayStatus = 'n/a';
+    /** @type {boolean} true once the gateway socket has opened at least once */
+    this._gatewayEverConnected = false;
+    /** @type {NodeJS.Timeout|undefined} debounce timer for monitor recovery */
+    this._gatewayRecoveryTimer = undefined;
+    /** @type {boolean} guard so the RWS listeners are attached only once */
+    this._gatewayWatchdogAttached = false;
+    /** @type {NodeJS.Timeout|undefined} periodic monitor-health watchdog */
+    this._gatewayWatchdogInterval = undefined;
+    /** @type {boolean} re-entrancy guard for _ensureMonitoring */
+    this._ensuringMonitor = false;
   }
 
   async init() {
@@ -129,6 +146,9 @@ class Manager extends EventEmitter {
           console.warn('BLE adapter not ready within timeout — waiting for delayed ready event');
         }
         this.startupStatus = adapterReady ? 0 : 1;
+        if (this.gateway === 'noble') {
+          this._attachGatewayWatchdog();
+        }
       } catch (error) {
         console.log(error);
         this.startupStatus = 1;
@@ -148,10 +168,181 @@ class Manager extends EventEmitter {
     this.gateway_key = gateway_key;
     this.gateway_user = gateway_user;
     this.gateway_pass = gateway_pass;
+    this.gatewayStatus = 'connecting';
   }
 
   getStartupStatus() {
     return this.startupStatus;
+  }
+
+  /**
+   * Health of the noble websocket gateway link, for the status payload.
+   * @returns {'n/a'|'connecting'|'connected'|'disconnected'|'unknown'}
+   */
+  getGatewayStatus() {
+    return this.gatewayStatus;
+  }
+
+  /**
+   * `host:port` of the configured noble gateway (for the UI tooltip), or '' in
+   * local BLE mode.
+   * @returns {string}
+   */
+  getGatewayHost() {
+    return this.gateway === 'noble' ? `${this.gateway_host}:${this.gateway_port}` : '';
+  }
+
+  /**
+   * @param {'n/a'|'connecting'|'connected'|'disconnected'|'unknown'} status
+   */
+  _setGatewayStatus(status) {
+    if (this.gatewayStatus === status) return;
+    this.gatewayStatus = status;
+    console.log(`[Gateway] État du lien: ${status}`);
+    this.emit('gatewayStatusChanged', status);
+  }
+
+  /**
+   * Observe the gateway websocket connection so the UI can show its health and
+   * so monitoring is re-armed after a reconnect.
+   *
+   * The SDK only emits `stateChange` once (on the very first connect), so a
+   * later gateway drop is otherwise invisible: `startupStatus` stays 0, the
+   * scan silently dies and the user gets no feedback. We reach the underlying
+   * `reconnecting-websocket` through the SDK object graph and attach our own
+   * open/close listeners. This is read-only/additive (it never alters SDK
+   * behaviour) and fully feature-detected — if the SDK shape changes the
+   * status degrades to 'unknown' instead of crashing.
+   */
+  _attachGatewayWatchdog() {
+    if (this._gatewayWatchdogAttached) return;
+    // TTLockClient → BluetoothLeService → NobleScannerWebsocket → Noble → binding → RWS
+    const ws = this.client?.bleService?.scanner?.noble?._bindings?.ws;
+    if (!ws || typeof ws.addEventListener !== 'function') {
+      console.warn('[Gateway] Impossible d\'observer le socket du SDK (structure interne inattendue) — état du lien indisponible.');
+      this._setGatewayStatus('unknown');
+      return;
+    }
+    this._gatewayWatchdogAttached = true;
+
+    // RWS readyState: 0 CONNECTING, 1 OPEN, 2 CLOSING, 3 CLOSED
+    this._setGatewayStatus(ws.readyState === 1 ? 'connected' : 'connecting');
+    if (ws.readyState === 1) this._gatewayEverConnected = true;
+
+    ws.addEventListener('open', () => {
+      const reconnect = this._gatewayEverConnected;
+      this._gatewayEverConnected = true;
+      this._setGatewayStatus('connected');
+      // The SDK does NOT re-issue the scan command after a reconnect (it only
+      // flushes its command buffer), and the freshly-rebooted gateway is not
+      // scanning — so monitoring is dead until we restart it ourselves.
+      if (reconnect) this._scheduleGatewayRecovery();
+    });
+    const onDown = () => {
+      if (this.gatewayStatus !== 'disconnected') this._setGatewayStatus('disconnected');
+    };
+    ws.addEventListener('close', onDown);
+    ws.addEventListener('error', onDown);
+
+    // Safety net: lock-op-driven monitor cycling (and the silent-false
+    // startMonitor() at _onScanStopped/_onLockDisconnected) can leave the
+    // monitor off even while the gateway is up. A periodic check re-arms it
+    // when the BLE path is idle, independently of the reconnect fast path.
+    if (!this._gatewayWatchdogInterval) {
+      this._gatewayWatchdogInterval = setInterval(() => {
+        this._ensureMonitoring();
+      }, 20000);
+      if (typeof this._gatewayWatchdogInterval.unref === 'function') {
+        this._gatewayWatchdogInterval.unref();
+      }
+    }
+  }
+
+  /**
+   * Debounced fast path: re-arm the BLE monitor right after a gateway
+   * reconnect (the periodic watchdog would otherwise pick it up within 20 s).
+   */
+  _scheduleGatewayRecovery() {
+    if (this._gatewayRecoveryTimer) clearTimeout(this._gatewayRecoveryTimer);
+    this._gatewayRecoveryTimer = setTimeout(() => {
+      this._gatewayRecoveryTimer = undefined;
+      this._ensureMonitoring();
+    }, 2500);
+  }
+
+  /**
+   * Block up to `ms` waiting for the noble gateway link to be connected.
+   * Returns immediately true in local BLE mode (no gateway).
+   * @param {number} ms
+   * @returns {Promise<boolean>}
+   */
+  async _waitForGatewayReady(ms) {
+    if (this.gateway !== 'noble') return true;
+    const deadline = Date.now() + ms;
+    while (this.gatewayStatus !== 'connected' && Date.now() < deadline) {
+      await sleep(200);
+    }
+    return this.gatewayStatus === 'connected';
+  }
+
+  /**
+   * Ensure the BLE monitor is actually running when the gateway is up and the
+   * BLE path is idle.
+   *
+   * Why this is non-trivial: `TTLockClient.stopMonitor()` is a no-op when
+   * `isMonitoring()` is already false (a lock op just stopped the scan) and it
+   * never resets the internal `monitoring` flag, so a later `startMonitor()`
+   * early-returns false forever — the monitor stays dead until a manual scan.
+   * We detect that wedged state and clear the internal flags before retrying.
+   * Reaching `client.monitoring/scanning` is internal coupling, but it is
+   * feature-detected (typeof guard) and degrades to a no-op if the SDK shape
+   * changes — never a crash.
+   */
+  async _ensureMonitoring() {
+    if (this.gateway !== 'noble' || this.gatewayStatus !== 'connected') return;
+    if (this._ensuringMonitor) return;
+    // BLE path busy — the active flow (scan / lock op / queued connect)
+    // restarts the monitor itself when it finishes.
+    if (this.scanning || this.waitingForConnect.size > 0 || this.connectQueue.size > 0) return;
+    if (this.client?.isMonitoring?.()) return;
+
+    this._ensuringMonitor = true;
+    try {
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        if (this.client.isMonitoring()) return;
+        try {
+          await this.client.stopMonitor();
+        } catch (error) {
+          console.debug('[Gateway] stopMonitor (best-effort) a échoué:', error.message);
+        }
+        // stopMonitor clears `monitoring` asynchronously via the scanStop event.
+        let wait = 20;
+        while (this.client.monitoring === true && !this.client.isMonitoring() && wait-- > 0) {
+          await sleep(100);
+        }
+        // Wedged-flag escape hatch: stopMonitor no-op'd but `monitoring` is
+        // still true while the scanner is not actually scanning.
+        if (typeof this.client.monitoring === 'boolean' && !this.client.isMonitoring()) {
+          this.client.monitoring = false;
+          if (typeof this.client.scanning === 'boolean') this.client.scanning = false;
+        }
+        await this.client.startMonitor();
+        let poll = 30;
+        while (!this.client.isMonitoring() && poll-- > 0) {
+          await sleep(100);
+        }
+        if (this.client.isMonitoring()) {
+          console.log('[Gateway] Reconnecté — monitor BLE actif: true');
+          return;
+        }
+        await sleep(attempt * 1000);
+      }
+      console.warn('[Gateway] Monitor BLE toujours inactif après reprise — nouvelle tentative au prochain cycle du watchdog.');
+    } catch (error) {
+      console.warn('[Gateway] Échec de la reprise du monitor:', error.message);
+    } finally {
+      this._ensuringMonitor = false;
+    }
   }
 
   async startScan() {
@@ -1214,6 +1405,16 @@ class Manager extends EventEmitter {
     // Remove from connectQueue so that _onLockDisconnected / _scheduleRetry won't
     // reschedule a retry once the mutex is ours.
     this.connectQueue.delete(address);
+    // Fail-fast: with a noble gateway down, every BLE command resolves to
+    // "Disconnected while waiting for response". Hammering 4 attempts ×
+    // backoff per op is pure noise and delays recovery — wait briefly for the
+    // link, then give up cleanly (no mutex held yet → safe early return).
+    if (this.gateway === 'noble' && this.gatewayStatus === 'disconnected') {
+      if (!(await this._waitForGatewayReady(6000))) {
+        console.warn(`Gateway noble déconnecté — connexion à ${address} abandonnée (réessai automatique à la reconnexion).`);
+        return false;
+      }
+    }
     // Serialize all BLE ops on this lock — without this, parallel user ops collide
     // on the same BLE session and the SDK rejects them with "Command already in progress".
     const release = await this._acquireMutex(address);
@@ -1233,6 +1434,11 @@ class Manager extends EventEmitter {
     if ((await this._waitForConnecting(lock, address)) && (!needsAdmin || lock.adminAuth)) return true;
     for (let attempt = 1; attempt <= 4; attempt++) {
       if (lock.isConnected() && (!needsAdmin || lock.adminAuth)) return true;
+      // Gateway dropped mid-loop — remaining attempts are doomed, bail early.
+      if (this.gateway === 'noble' && this.gatewayStatus === 'disconnected') {
+        console.warn(`Gateway noble déconnecté pendant la connexion à ${address} — arrêt des tentatives.`);
+        break;
+      }
       const result = await this._connectAttempt(lock, address, needsAdmin, attempt);
       if (result === true) return true;
       // Exponential-ish back-off: 1.5 s, 3 s, 4.5 s between retries.
