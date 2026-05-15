@@ -228,12 +228,28 @@ async function handleConfig(api, msg) {
 
 async function handleOperations(api, msg) {
   if (!msg.data?.address) return;
-  const operations = await manager.getOperationLog(msg.data.address, true);
-  if (!operations) {
-    api.sendError('Failed getting operation log', msg);
+  const address = msg.data.address;
+  // reload absent (front compilé actuel) → on tente quand même le BLE pour
+  // préserver le bouton « rafraîchir ». reload === false (front futur) →
+  // cache seul. reload === true → cache puis BLE forcé.
+  const reload = msg.data.reload;
+
+  const cached = manager.getPersistedOperationLog(address);
+  if (cached.length) api.sendOperationLog(address, cached);
+
+  if (reload === false) return; // vue ouverte : cache seul, pas de BLE
+
+  const fresh = await manager.getOperationLog(address, true);
+  if (Array.isArray(fresh)) {
+    api.sendOperationLog(address, fresh);
     return;
   }
-  api.sendOperationLog(msg.data.address, operations);
+  // BLE échoué
+  if (!cached.length) {
+    api.sendOperationLog(address, []); // débloque le spinner (setOperations)
+    api.sendError('Failed getting operation log', msg);
+  }
+  // cache présent → silencieux (choix utilisateur)
 }
 
 async function handleUnpair(api, msg) {

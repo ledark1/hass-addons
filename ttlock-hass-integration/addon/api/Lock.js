@@ -92,6 +92,41 @@ class Lock {
   }
 
   /**
+   * Build a Lock from a persisted lockData.json entry, WITHOUT any BLE.
+   * Used so paired locks remain visible (and their cached operation log
+   * reachable) even when the lock is not currently advertising / the
+   * gateway is offline. Capabilities are unknown offline → false; the UI
+   * still exposes the operations action.
+   * @param {Object} entry store.getLockData() entry
+   * @returns {Lock}
+   */
+  static fromStoreEntry(entry) {
+    const lock = new Lock();
+    const address = entry.address;
+    const deviceInfo = store.getDeviceInfo(address);
+
+    lock.address = address;
+    lock.name = store.getLockAlias(address) || address;
+    lock.paired = true;
+    lock.connected = false;
+    lock.rssi = typeof entry.rssi === 'number' ? entry.rssi : -1;
+    lock.battery = typeof entry.battery === 'number' ? entry.battery : -1;
+    lock.locked = typeof entry.lockedStatus === 'number' ? entry.lockedStatus : -1;
+    lock.autoLockTime = typeof entry.autoLockTime === 'number' ? entry.autoLockTime : -1;
+    lock.hasAutoLock = false;
+    lock.hasPasscode = false;
+    lock.hasCard = false;
+    lock.hasFinger = false;
+    lock.hasAudio = false;
+    lock.audio = false;
+    lock.model = deviceInfo?.modelNum || '';
+    lock.firmware = deviceInfo?.firmwareRevision || '';
+    lock.manufacturer = '';
+
+    return lock;
+  }
+
+  /**
    *
    * @param {import('ttlock-sdk-js').TTLock} lockObject
    */

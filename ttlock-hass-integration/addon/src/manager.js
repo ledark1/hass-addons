@@ -108,8 +108,21 @@ class Manager extends EventEmitter {
         this.client.on('foundLock', this._onFoundLock.bind(this));
         this.client.on('scanStart', this._onScanStarted.bind(this));
         this.client.on('scanStop', this._onScanStopped.bind(this));
-        this.client.on('monitorStart', () => console.log('Monitor started'));
-        this.client.on('monitorStop', () => console.log('Monitor stopped'));
+        // Transition guard: the BLE scanner can emit scanStart/scanStop more
+        // than once per monitoring session (slow/flaky adapter bring-up), and
+        // TTLockClient.onScanStart has no false→true guard. startMonitor() is
+        // idempotent so this is purely cosmetic — collapse duplicates so the
+        // log reflects real monitor state transitions only.
+        this.client.on('monitorStart', () => {
+          if (this._monitorActiveLogged) return;
+          this._monitorActiveLogged = true;
+          console.log('Monitor started');
+        });
+        this.client.on('monitorStop', () => {
+          if (!this._monitorActiveLogged) return;
+          this._monitorActiveLogged = false;
+          console.log('Monitor stopped');
+        });
         this.client.on('updatedLockData', this._onUpdatedLockData.bind(this));
         const adapterReady = await this.client.prepareBTService();
         if (!adapterReady) {
@@ -940,6 +953,21 @@ class Manager extends EventEmitter {
     return operation;
   }
 
+  /**
+   * Journal d'opérations persisté dans lockData.json, sans aucune connexion BLE.
+   * Cloné avant enrichissement pour ne pas polluer store.lockData (saveData()
+   * réécrirait sinon recordTypeName/recordTypeCategory/passwordName sur disque).
+   * @param {string} address
+   * @returns {Array}
+   */
+  getPersistedOperationLog(address) {
+    const entry = store.getLockData().find((e) => e && e.address === address);
+    if (!entry || !Array.isArray(entry.operationLog)) return [];
+    return entry.operationLog
+      .filter(Boolean)
+      .map((op) => this._enrichOperation(structuredClone(op)));
+  }
+
   async getOperationLog(address, reload = false) {
     const lock = this.pairedLocks.get(address);
     if (lock === undefined) return false;
@@ -951,9 +979,16 @@ class Manager extends EventEmitter {
       // fresh entries. Keep noCache=false so the cache is merged — passing noCache=true
       // makes the SDK re-fetch from sequence 0 (dozens of BLE round-trips, unreliable).
       if (reload) lock.newEvents = true;
-      // Wrap in withTimeout: if the BLE link stalls mid-fetch the SDK can hang indefinitely,
-      // which would keep the per-address mutex held and freeze every later user op.
-      const operations = structuredClone(await withTimeout(lock.getOperationLog(true, false), 30000, 'getOperationLog ' + address));
+      // Do NOT wrap in withTimeout: a full all=true sweep on a cold cache is
+      // dozens–hundreds of BLE round-trips and legitimately exceeds any fixed
+      // cap. The SDK loop is already bounded (maxRetry, failedSequences>10 stop,
+      // probe, `if(!isConnected) break`). Wrapping also leaked the still-running
+      // SDK promise while the finally released the mutex → "Command already in
+      // progress" — same reason connect() is never wrapped in this file.
+      const startedAt = Date.now();
+      console.log('getOperationLog: starting full fetch for', address, reload ? '(reload)' : '');
+      const operations = structuredClone(await lock.getOperationLog(true, false));
+      console.log(`getOperationLog: ${operations.filter(Boolean).length} entries for ${address} in ${Date.now() - startedAt}ms`);
       return operations.filter(Boolean).map((op) => this._enrichOperation(op));
     } catch (error) {
       console.error(`getOperationLog error:`, error);

@@ -194,19 +194,32 @@ class WsApi {
     const newVisibleLocks = manager.getNewVisible();
     const pairedVisibleLocks = manager.getPairedVisible();
     let locks = [];
+    const seen = new Set();
     for (let [, lock] of newVisibleLocks) {
       try {
-        locks.push(await Lock.fromTTLock(lock));
+        const l = await Lock.fromTTLock(lock);
+        locks.push(l);
+        seen.add(l.address);
       } catch (err) {
         console.debug('getLocks: lock not yet connected', err.message);
       }
     }
     for (let [, lock] of pairedVisibleLocks) {
       try {
-        locks.push(await Lock.fromTTLock(lock));
+        const l = await Lock.fromTTLock(lock);
+        locks.push(l);
+        seen.add(l.address);
       } catch (err) {
         console.debug('getLocks: lock not yet connected', err.message);
       }
+    }
+    // Persisted-but-offline locks: keep paired locks visible so their cached
+    // operation log (lockData.json) stays reachable even when the lock is not
+    // advertising / the gateway is down. BLE-visible entries take precedence.
+    for (const entry of store.getLockData()) {
+      if (!entry || !entry.address || seen.has(entry.address)) continue;
+      seen.add(entry.address);
+      locks.push(Lock.fromStoreEntry(entry));
     }
     return locks;
   }
