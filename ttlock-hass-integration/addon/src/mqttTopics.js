@@ -72,6 +72,11 @@ export function lastOperationTopic(id) {
   return DATA_PREFIX + '/' + id + '/last_operation';
 }
 
+/** Topic carrying the JSON payload of the "last access" (last unlock) sensor. */
+export function lastUnlockTopic(id) {
+  return DATA_PREFIX + '/' + id + '/last_unlock';
+}
+
 /**
  * Home Assistant MQTT discovery config topic.
  * @param {string} prefix discovery prefix (e.g. "homeassistant")
@@ -100,6 +105,28 @@ export function parseCommandTopic(topic) {
 }
 
 /**
+ * Reducer keeping the more recent of two operations, mirroring the frontend
+ * ordering: operateDate desc, then recordNumber desc.
+ */
+function _moreRecent(best, op) {
+  if (!best) return op;
+  if (op.operateDate > best.operateDate) return op;
+  if (op.operateDate < best.operateDate) return best;
+  return (op.recordNumber ?? 0) > (best.recordNumber ?? 0) ? op : best;
+}
+
+/**
+ * Record types in the UNLOCK category that are NOT a real access method but
+ * door-sensor side effects, so they must not mask the credential that opened
+ * the door on the "last access" sensor:
+ *  - 31 = DOOR_SENSOR_UNLOCK ("Ouverture capteur de porte")
+ *  - 32 = DOOR_GO_OUT ("Passage sortie enregistré")
+ * Values mirror the SDK `LogOperate` enum; kept inline so this module stays
+ * dependency-free (like DATA_PREFIX et al.).
+ */
+const NON_CREDENTIAL_UNLOCK_RECORD_TYPES = new Set([31, 32]);
+
+/**
  * Pick the most recent operation from an (already enriched) operation log,
  * mirroring the frontend ordering: operateDate desc, then recordNumber desc.
  * @param {Array} operations
@@ -107,12 +134,28 @@ export function parseCommandTopic(topic) {
  */
 export function latestOperation(operations) {
   if (!Array.isArray(operations) || operations.length === 0) return null;
-  return operations.filter(Boolean).reduce((best, op) => {
-    if (!best) return op;
-    if (op.operateDate > best.operateDate) return op;
-    if (op.operateDate < best.operateDate) return best;
-    return (op.recordNumber ?? 0) > (best.recordNumber ?? 0) ? op : best;
-  }, null);
+  return operations.filter(Boolean).reduce(_moreRecent, null);
+}
+
+/**
+ * Pick the most recent *credential* unlock (recordTypeCategory === 'UNLOCK',
+ * excluding door-sensor side effects) so the "last access" sensor surfaces the
+ * method (carte IC, code, empreinte, …) even when an auto-lock immediately
+ * overwrites the latest record. Operations must be enriched
+ * (manager._enrichOperation sets recordTypeCategory).
+ * @param {Array} operations
+ * @returns {object|null}
+ */
+export function latestUnlock(operations) {
+  if (!Array.isArray(operations) || operations.length === 0) return null;
+  return operations
+    .filter(
+      (op) =>
+        op &&
+        op.recordTypeCategory === 'UNLOCK' &&
+        !NON_CREDENTIAL_UNLOCK_RECORD_TYPES.has(op.recordType)
+    )
+    .reduce(_moreRecent, null);
 }
 
 /**

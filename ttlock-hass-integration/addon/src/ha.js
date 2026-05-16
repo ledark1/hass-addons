@@ -12,9 +12,11 @@ import {
   commandSubscription,
   lockAvailabilityTopic,
   lastOperationTopic,
+  lastUnlockTopic,
   discoveryConfigTopic,
   parseCommandTopic,
   latestOperation,
+  latestUnlock,
   buildLastOperationPayload
 } from './mqttTopics.js';
 
@@ -229,6 +231,20 @@ class HomeAssistant {
         }
       },
       {
+        component: 'sensor',
+        objectId: 'last_access',
+        payload: {
+          unique_id: 'ttlock_' + id + '_last_access',
+          name: name + ' Last access',
+          device: device,
+          icon: 'mdi:account-key',
+          state_topic: lastUnlockTopic(id),
+          value_template: '{{ value_json.event }}',
+          json_attributes_topic: lastUnlockTopic(id),
+          ...avail
+        }
+      },
+      {
         component: 'binary_sensor',
         objectId: 'connectivity',
         payload: {
@@ -332,6 +348,29 @@ class HomeAssistant {
   }
 
   /**
+   * Publish the most recent *credential* unlock (carte IC / code / empreinte …)
+   * for the "last access" sensor. Unlike publishLastOperation this skips the
+   * auto-lock / door-sensor records that would otherwise mask the method.
+   * Reads the persisted log only — no BLE.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async publishLastUnlock(lock) {
+    if (!this.connected) return;
+    try {
+      const ops = manager.getPersistedOperationLog(lock.getAddress());
+      const last = latestUnlock(ops);
+      if (!last) return;
+      const id = lockIdFromAddress(lock.getAddress());
+      await this._publish(lastUnlockTopic(id), buildLastOperationPayload(last), {
+        retain: true,
+        qos: 1
+      });
+    } catch (error) {
+      console.error('MQTT publishLastUnlock error:', error.message);
+    }
+  }
+
+  /**
    * Re-publish bridge availability and every known lock's discovery + state
    * after a (re)connection — retained messages alone are not enough if the
    * broker restarted.
@@ -346,6 +385,7 @@ class HomeAssistant {
         await this.publishLockAvailability(lock, true);
         await this.updateLockState(lock);
         await this.publishLastOperation(lock);
+        await this.publishLastUnlock(lock);
       } catch (error) {
         console.error('MQTT republish error:', error.message);
       }
@@ -360,6 +400,7 @@ class HomeAssistant {
     await this.publishLockAvailability(lock, true);
     await this.updateLockState(lock);
     await this.publishLastOperation(lock);
+    await this.publishLastUnlock(lock);
   }
 
   /**
@@ -415,6 +456,7 @@ class HomeAssistant {
       discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'battery'),
       discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'rssi'),
       discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_operation'),
+      discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_access'),
       discoveryConfigTopic(this.discovery_prefix, 'binary_sensor', id, 'connectivity')
     ];
     for (const topic of discoveryTopics) {
@@ -424,7 +466,7 @@ class HomeAssistant {
       await this._publish(topic, '', { retain: true });
     }
     // Purge retained data topics so a re-pair starts clean.
-    for (const topic of [stateTopic(id), lockAvailabilityTopic(id), lastOperationTopic(id)]) {
+    for (const topic of [stateTopic(id), lockAvailabilityTopic(id), lastOperationTopic(id), lastUnlockTopic(id)]) {
       await this._publish(topic, '', { retain: true });
     }
     this.configuredLocks.delete(lock.getAddress());

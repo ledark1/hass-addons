@@ -12,9 +12,11 @@ import {
   commandSubscription,
   lockAvailabilityTopic,
   lastOperationTopic,
+  lastUnlockTopic,
   discoveryConfigTopic,
   parseCommandTopic,
   latestOperation,
+  latestUnlock,
   buildLastOperationPayload
 } from '../src/mqttTopics.js';
 
@@ -51,6 +53,7 @@ test('topic helpers', () => {
   assert.equal(commandSubscription(), 'ttlock/+/set');
   assert.equal(lockAvailabilityTopic('e1581b3a605e'), 'ttlock/e1581b3a605e/availability');
   assert.equal(lastOperationTopic('e1581b3a605e'), 'ttlock/e1581b3a605e/last_operation');
+  assert.equal(lastUnlockTopic('e1581b3a605e'), 'ttlock/e1581b3a605e/last_unlock');
   assert.equal(
     discoveryConfigTopic('homeassistant', 'sensor', 'e1581b3a605e', 'battery'),
     'homeassistant/sensor/e1581b3a605e/battery/config'
@@ -88,6 +91,35 @@ test('latestOperation picks newest (operateDate then recordNumber)', () => {
     { operateDate: '2026-05-11 23:00:00', recordNumber: 4 }
   ];
   assert.equal(latestOperation(ops).recordNumber, 6);
+});
+
+test('latestUnlock picks newest credential unlock, ignores door-sensor side effects', () => {
+  assert.equal(latestUnlock([]), null);
+  assert.equal(latestUnlock(null), null);
+  // No credential unlock at all -> null
+  assert.equal(
+    latestUnlock([
+      { operateDate: '2026-05-15 23:50:59', recordNumber: 4101, recordType: 30, recordTypeCategory: 'LOCK' },
+      { operateDate: '2026-05-15 23:50:54', recordNumber: 4100, recordType: 31, recordTypeCategory: 'UNLOCK' }
+    ]),
+    null
+  );
+  // IC unlock (17) wins even though DOOR_SENSOR_UNLOCK (31) and the LOCK record are more recent
+  const ops = [
+    { operateDate: '2026-05-15 23:48:18', recordNumber: 4098, recordType: 30, recordTypeCategory: 'LOCK' },
+    { operateDate: '2026-05-15 23:50:52', recordNumber: 4099, recordType: 17, recordTypeCategory: 'UNLOCK' },
+    { operateDate: '2026-05-15 23:50:54', recordNumber: 4100, recordType: 31, recordTypeCategory: 'UNLOCK' },
+    { operateDate: '2026-05-15 23:50:59', recordNumber: 4101, recordType: 30, recordTypeCategory: 'LOCK' }
+  ];
+  const last = latestUnlock(ops);
+  assert.equal(last.recordNumber, 4099);
+  assert.equal(last.recordType, 17);
+  // DOOR_GO_OUT (32) is also excluded; falls back to the earlier code unlock (4)
+  const ops2 = [
+    { operateDate: '2026-05-15 10:00:00', recordNumber: 10, recordType: 4, recordTypeCategory: 'UNLOCK' },
+    { operateDate: '2026-05-15 11:00:00', recordNumber: 11, recordType: 32, recordTypeCategory: 'UNLOCK' }
+  ];
+  assert.equal(latestUnlock(ops2).recordNumber, 10);
 });
 
 test('buildLastOperationPayload', () => {
