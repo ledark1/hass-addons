@@ -74,17 +74,27 @@
           </template>
           <v-list density="compact" min-width="220">
             <v-list-item
-              :title="$t('app.gateway.restart')"
-              prepend-icon="mdi-lan-pending"
               :disabled="isRestartingGateway || isRebootingEsp32"
               @click="$store.dispatch('restartGateway')"
-            />
+            >
+              <template #prepend>
+                <v-icon color="warning" size="18" class="mr-3">mdi-lan-pending</v-icon>
+              </template>
+              <template #title>
+                <span class="text-caption">{{ $t('app.gateway.restart') }}</span>
+              </template>
+            </v-list-item>
             <v-list-item
-              :title="$t('app.gateway.rebootEsp32')"
-              prepend-icon="mdi-restart"
               :disabled="isRestartingGateway || isRebootingEsp32"
               @click="$store.dispatch('rebootEsp32')"
-            />
+            >
+              <template #prepend>
+                <v-icon color="error" size="18" class="mr-3">mdi-restart</v-icon>
+              </template>
+              <template #title>
+                <span class="text-caption">{{ $t('app.gateway.rebootEsp32') }}</span>
+              </template>
+            </v-list-item>
           </v-list>
         </v-menu>
 
