@@ -13,10 +13,7 @@ import init from './src/init.js';
 function isRecoverableGatewayError(error) {
   const msg = String(error?.message ?? error ?? '');
   const code = error?.code;
-  return (
-    /WebSocket.*clos|closed before the connection|WebSocket is not open/i.test(msg) ||
-    ['ECONNREFUSED', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH', 'ENOTFOUND', 'ECONNRESET'].includes(code)
-  );
+  return /WebSocket.*clos|closed before the connection|WebSocket is not open/i.test(msg) || ['ECONNREFUSED', 'ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH', 'ENOTFOUND', 'ECONNRESET'].includes(code);
 }
 
 // Throttle the gateway-unreachable warning: reconnecting-websocket retries with
@@ -26,7 +23,7 @@ function warnGatewayUnreachable() {
   const now = Date.now();
   if (now - lastGatewayWarn < 30000) return;
   lastGatewayWarn = now;
-  console.warn('[Gateway] Connexion au gateway (ESP/noble) indisponible — le client WebSocket du SDK retentera automatiquement (backoff).');
+  console.warn('[Gateway] Connection to gateway (ESP/noble) unavailable — the SDK WebSocket client will automatically retry (backoff).');
 }
 
 // The reconnecting-websocket connect failure surfaces either as an

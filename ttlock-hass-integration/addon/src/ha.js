@@ -35,7 +35,8 @@ class HomeAssistant {
     this.mqttUser = options.mqttUser;
     this.mqttPass = options.mqttPass;
     this.discovery_prefix = options.discovery_prefix || 'homeassistant';
-    this.configuredLocks = new Set();
+    /** @type {Map<string, string>} address → last published name (alias or SDK name) */
+    this.configuredLocks = new Map();
 
     this.connected = false;
     this._connecting = false;
@@ -125,13 +126,14 @@ class HomeAssistant {
    * @param {string} id
    */
   _buildDevice(lock, id) {
-    const deviceInfo = lock.deviceInfo || store.getDeviceInfo(lock.getAddress());
+    const address = lock.getAddress();
+    const deviceInfo = lock.deviceInfo || store.getDeviceInfo(address);
     const rawModel = lock.getModel();
     const rawFirmware = lock.getFirmware();
     const rawManufacturer = lock.getManufacturer();
     return {
       identifiers: ['ttlock_' + id],
-      name: lock.getName(),
+      name: store.getLockAlias(address) || lock.getName(),
       manufacturer: rawManufacturer && rawManufacturer !== 'unknown' ? rawManufacturer : '',
       model: rawModel && rawModel !== 'unknown' ? rawModel : deviceInfo?.modelNum || '',
       sw_version: rawFirmware && rawFirmware !== 'unknown' ? rawFirmware : deviceInfo?.firmwareRevision || ''
@@ -160,10 +162,11 @@ class HomeAssistant {
    */
   async configureLock(lock, force = false) {
     if (!this.connected) return;
-    if (!force && this.configuredLocks.has(lock.getAddress())) return;
+    const address = lock.getAddress();
+    const name = store.getLockAlias(address) || lock.getName();
+    if (!force && this.configuredLocks.get(address) === name) return;
 
-    const id = lockIdFromAddress(lock.getAddress());
-    const name = lock.getName();
+    const id = lockIdFromAddress(address);
     const device = this._buildDevice(lock, id);
     const avail = this._hybridAvailability(id);
 
@@ -272,7 +275,7 @@ class HomeAssistant {
       );
     }
 
-    this.configuredLocks.add(lock.getAddress());
+    this.configuredLocks.set(address, name);
   }
 
   /**
@@ -377,7 +380,7 @@ class HomeAssistant {
    */
   async _republishAll() {
     await this._publish(BRIDGE_AVAILABILITY_TOPIC, PAYLOAD_ONLINE, { retain: true, qos: 1 });
-    for (const address of this.configuredLocks) {
+    for (const address of this.configuredLocks.keys()) {
       const lock = manager.pairedLocks?.get?.(address);
       if (!lock) continue;
       try {
@@ -441,6 +444,7 @@ class HomeAssistant {
    * @param {import('ttlock-sdk-js').TTLock} lock
    */
   async _onLockBatteryUpdated(lock) {
+    await this.configureLock(lock); // no-op unless alias changed since last discovery publish
     await this._refreshLock(lock);
   }
 

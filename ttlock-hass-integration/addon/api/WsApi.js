@@ -219,7 +219,7 @@ class WsApi {
     // operation log (lockData.json) stays reachable even when the lock is not
     // advertising / the gateway is down. BLE-visible entries take precedence.
     for (const entry of store.getLockData()) {
-      if (!entry || !entry.address || seen.has(entry.address)) continue;
+      if (!entry?.address || seen.has(entry.address)) continue;
       seen.add(entry.address);
       locks.push(Lock.fromStoreEntry(entry));
     }

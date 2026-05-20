@@ -5,6 +5,19 @@ import store from '../src/store.js';
 import Message from './Message.js';
 import WsApi from './WsApi.js';
 
+// ── validation helpers ────────────────────────────────────────────────────────
+
+/** TTLock date strings are exactly 12 digits: YYYYMMDDHHmm */
+function isValidTTLockDate(d) {
+  return typeof d === 'string' && /^\d{12}$/.test(d);
+}
+
+/** autolock must be a non-NaN non-negative integer */
+function isValidAutoLock(v) {
+  const n = Number.parseInt(v, 10);
+  return !Number.isNaN(n) && n >= 0;
+}
+
 // ── case handlers ────────────────────────────────────────────────────────────
 
 async function handlePair(wss, msg) {
@@ -62,6 +75,10 @@ async function handlePasscode(api, ws, msg) {
       api.sendError('Invalid passcode data: missing required fields', msg);
       return;
     }
+    if (!isValidTTLockDate(passcode.startDate) || !isValidTTLockDate(passcode.endDate)) {
+      api.sendError('Invalid passcode data: invalid date format (expected YYYYMMDDHHmm)', msg);
+      return;
+    }
     operationKind = 'add';
     passcodes = await manager.addPasscode(address, passcode.type, passcode.newPassCode, passcode.startDate, passcode.endDate);
   } else if (passCodeIsDelete) {
@@ -79,6 +96,10 @@ async function handlePasscode(api, ws, msg) {
     }
     if (!passcode.startDate || !passcode.endDate) {
       api.sendError('Invalid passcode data: missing dates for update', msg);
+      return;
+    }
+    if (!isValidTTLockDate(passcode.startDate) || !isValidTTLockDate(passcode.endDate)) {
+      api.sendError('Invalid passcode data: invalid date format (expected YYYYMMDDHHmm)', msg);
       return;
     }
     operationKind = 'update';
@@ -119,10 +140,18 @@ async function handleCard(api, ws, msg) {
   let cards = false;
 
   if (card.cardNumber == -1) {
+    if (!isValidTTLockDate(card.startDate) || !isValidTTLockDate(card.endDate)) {
+      api.sendError('Invalid card data: invalid date format (expected YYYYMMDDHHmm)', msg);
+      return;
+    }
     cards = await manager.addCard(address, card.startDate, card.endDate, card.alias);
   } else if (card.startDate == -1) {
     cards = await manager.deleteCard(address, card.cardNumber);
   } else {
+    if (!isValidTTLockDate(card.startDate) || !isValidTTLockDate(card.endDate)) {
+      api.sendError('Invalid card data: invalid date format (expected YYYYMMDDHHmm)', msg);
+      return;
+    }
     cards = await manager.updateCard(address, card.cardNumber, card.startDate, card.endDate, card.alias);
   }
 
@@ -157,10 +186,18 @@ async function handleFinger(api, ws, msg) {
   let fingers = false;
 
   if (finger.fpNumber == -1) {
+    if (!isValidTTLockDate(finger.startDate) || !isValidTTLockDate(finger.endDate)) {
+      api.sendError('Invalid fingerprint data: invalid date format (expected YYYYMMDDHHmm)', msg);
+      return;
+    }
     fingers = await manager.addFinger(address, finger.startDate, finger.endDate, finger.alias);
   } else if (finger.startDate == -1) {
     fingers = await manager.deleteFinger(address, finger.fpNumber);
   } else {
+    if (!isValidTTLockDate(finger.startDate) || !isValidTTLockDate(finger.endDate)) {
+      api.sendError('Invalid fingerprint data: invalid date format (expected YYYYMMDDHHmm)', msg);
+      return;
+    }
     fingers = await manager.updateFinger(address, finger.fpNumber, finger.startDate, finger.endDate, finger.alias);
   }
 
@@ -187,11 +224,19 @@ async function handleSettings(api, msg) {
   const confirmed = {};
 
   if (settings.autolock !== undefined) {
-    confirmed.autolock = await manager.setAutoLock(address, Number.parseInt(settings.autolock));
+    if (!isValidAutoLock(settings.autolock)) {
+      api.sendError('Invalid autolock value: must be a non-negative integer', msg);
+      return;
+    }
+    confirmed.autolock = await manager.setAutoLock(address, Number.parseInt(settings.autolock, 10));
     if (confirmed.autolock !== true) api.sendError('Unable to set auto-lock time', msg);
   }
 
   if (settings.audio !== undefined) {
+    if (typeof settings.audio !== 'boolean') {
+      api.sendError('Invalid audio value: must be a boolean', msg);
+      return;
+    }
     confirmed.audio = await manager.setAudio(address, settings.audio);
     if (confirmed.audio !== true) api.sendError('Failed to set audio mode', msg);
   }
@@ -315,8 +360,23 @@ export default async function initApi(server) {
   async function sendStatusUpdate() {
     WsApi.sendStatus(wss);
   }
-  async function sendLockStatusUpdate(lock) {
-    WsApi.sendLockStatus(wss, lock);
+
+  // Debounce per-lock status broadcasts: a burst of rapid events (lockUnlock +
+  // lockUpdated + battery) for the same lock collapses into a single broadcast
+  // after a 50 ms quiet window. fromTTLock() reads current state at fire time,
+  // so the broadcast always reflects the latest values.
+  const _lockUpdateTimers = new Map();
+  function sendLockStatusUpdate(lock) {
+    const address = lock.getAddress?.() || '';
+    if (!address) {
+      WsApi.sendLockStatus(wss, lock);
+      return;
+    }
+    if (_lockUpdateTimers.has(address)) clearTimeout(_lockUpdateTimers.get(address));
+    _lockUpdateTimers.set(address, setTimeout(() => {
+      _lockUpdateTimers.delete(address);
+      WsApi.sendLockStatus(wss, lock);
+    }, 50));
   }
 
   manager.on('lockListChanged', sendStatusUpdate);

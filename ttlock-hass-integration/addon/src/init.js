@@ -21,24 +21,24 @@ function normaliseNobleOptions(options) {
   const problems = [];
 
   const host = String(options.gateway_host ?? '').trim();
-  if (!host) problems.push('gateway_host est vide');
+  if (!host) problems.push('[gateway_host] is empty');
 
   const port = Number.parseInt(options.gateway_port, 10);
   const validPort = Number.isInteger(port) && port > 0 && port < 65536;
   if (!validPort) problems.push(`gateway_port invalide (${options.gateway_port})`);
 
   const key = String(options.gateway_key ?? '').trim();
-  if (!key) problems.push('gateway_key est vide — la clé AES par défaut du SDK sera utilisée');
-  else if (!/^[0-9a-fA-F]+$/.test(key) || key.length % 2 !== 0) problems.push('gateway_key n\'est pas une chaîne hexadécimale valide');
+  if (!key) problems.push('[gateway_key] is empty — the default AES key from the SDK will be used');
+  else if (!/^[0-9a-fA-F]+$/.test(key) || key.length % 2 !== 0) problems.push("gateway_key n'est pas une chaîne hexadécimale valide");
 
   const user = String(options.gateway_user ?? '').trim();
   const pass = String(options.gateway_pass ?? '').trim();
-  if (!user || !pass) problems.push('gateway_user/gateway_pass vide — identifiants par défaut du SDK (admin/admin)');
+  if (!user || !pass) problems.push('[gateway_user/gateway_pass] is empty — default SDK credentials (admin/admin)');
 
   if (problems.length) {
-    console.warn('[Gateway] Configuration noble incomplète ou invalide :');
+    console.warn('[Gateway] Noble configuration incomplete or invalid :');
     for (const p of problems) console.warn('  - ' + p);
-    console.warn('[Gateway] Le SDK utilisera ses valeurs par défaut pour les champs manquants — corrigez la configuration de l\'addon si la connexion échoue.');
+    console.warn('[Gateway] The SDK will use its default values ​​for missing fields — correct the addon configuration if the connection fails.');
   }
 
   return {

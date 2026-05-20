@@ -114,6 +114,35 @@ class Store {
     return this.deviceInfoData[address];
   }
 
+  /**
+   * Save feature flags for a lock (hasAutoLock, hasPasscode, etc.)
+   * Only triggers a disk write when something actually changed.
+   * @param {string} address Lock MAC address
+   * @param {{ hasAutoLock: boolean, hasPasscode: boolean, hasCard: boolean, hasFinger: boolean, hasAudio: boolean }} features
+   */
+  setLockFeatures(address, features) {
+    if (!address || !features) return;
+    if (!this.deviceInfoData[address]) this.deviceInfoData[address] = {};
+    const prev = this.deviceInfoData[address].features;
+    if (prev &&
+      prev.hasAutoLock === features.hasAutoLock &&
+      prev.hasPasscode === features.hasPasscode &&
+      prev.hasCard === features.hasCard &&
+      prev.hasFinger === features.hasFinger &&
+      prev.hasAudio === features.hasAudio) return;
+    this.deviceInfoData[address].features = features;
+    this.saveData();
+  }
+
+  /**
+   * Get persisted feature flags for a lock
+   * @param {string} address Lock MAC address
+   * @returns {{ hasAutoLock: boolean, hasPasscode: boolean, hasCard: boolean, hasFinger: boolean, hasAudio: boolean }|undefined}
+   */
+  getLockFeatures(address) {
+    return this.deviceInfoData[address]?.features;
+  }
+
   async loadData() {
     try {
       await fs.access(this.settingsPath + '/lockData.json');
@@ -181,7 +210,21 @@ class Store {
       } catch (error) {
         if (error.code !== 'ENOENT') console.warn('lockData.json backup failed:', error.message);
       }
-      await fs.writeFile(tmpLock, Buffer.from(JSON.stringify(this.lockData)));
+      // Prune operationLog to the 300 most recent entries before writing — in-memory
+      // lockData stays intact so the SDK's sequence-number tracking is unaffected.
+      const MAX_OPLOG = 300;
+      const lockDataToSave = this.lockData.map((entry) => {
+        if (!entry || !Array.isArray(entry.operationLog) || entry.operationLog.length <= MAX_OPLOG) return entry;
+        const pruned = entry.operationLog
+          .filter(Boolean)
+          .sort((a, b) => {
+            if (b.operateDate !== a.operateDate) return (b.operateDate || 0) - (a.operateDate || 0);
+            return (b.recordNumber || 0) - (a.recordNumber || 0);
+          })
+          .slice(0, MAX_OPLOG);
+        return { ...entry, operationLog: pruned };
+      });
+      await fs.writeFile(tmpLock, Buffer.from(JSON.stringify(lockDataToSave)));
       await this.fileDataRename(tmpLock, lockPath);
     } catch (error) {
       console.error(error);

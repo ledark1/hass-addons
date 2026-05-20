@@ -68,6 +68,10 @@ class Manager extends EventEmitter {
     this._cachedAutoLock = new Map();
     /** @type {Map<string, Promise<{passcodes: any, cards: any, fingers: any}>>} In-flight getCredentials promises — coalesces duplicate concurrent requests */
     this._pendingCredentials = new Map();
+    /** @type {Map<string, Promise<any>>} In-flight lockLock promises — coalesces duplicate concurrent requests */
+    this._pendingLock = new Map();
+    /** @type {Map<string, Promise<any>>} In-flight unlockLock promises — coalesces duplicate concurrent requests */
+    this._pendingUnlock = new Map();
     /** @type {'none'|'noble'} */
     this.gateway = 'none';
     this.gateway_host = '';
@@ -225,6 +229,14 @@ class Manager extends EventEmitter {
     }
     this._gatewayWatchdogAttached = true;
 
+    // Reduce reconnect delay for LAN gateways: default RWS minReconnectionDelay
+    // is 1000 ms which is excessive on a local network. Feature-detected to
+    // survive RWS internal shape changes without crashing.
+    if (ws._options && typeof ws._options === 'object') {
+      ws._options.minReconnectionDelay = 300;
+      ws._options.connectionTimeout = 2000;
+    }
+
     // RWS readyState: 0 CONNECTING, 1 OPEN, 2 CLOSING, 3 CLOSED
     this._setGatewayStatus(ws.readyState === 1 ? 'connected' : 'connecting');
     if (ws.readyState === 1) this._gatewayEverConnected = true;
@@ -267,7 +279,7 @@ class Manager extends EventEmitter {
     this._gatewayRecoveryTimer = setTimeout(() => {
       this._gatewayRecoveryTimer = undefined;
       this._ensureMonitoring();
-    }, 2500);
+    }, 500);
   }
 
   /**
@@ -399,6 +411,7 @@ class Manager extends EventEmitter {
         this.pairedLocks.set(lock.getAddress(), lock);
         this.newLocks.delete(lock.getAddress());
         this._bindLockEvents(lock);
+        this._saveLockFeatures(lock);
         // Persist deviceInfo (firmware, model, etc.) — getLockData() from the SDK doesn't include it
         if (lock.deviceInfo) {
           store.setDeviceInfo(lock.getAddress(), lock.deviceInfo);
@@ -432,6 +445,20 @@ class Manager extends EventEmitter {
   }
 
   async unlockLock(address) {
+    if (this._pendingUnlock.has(address)) {
+      console.log('unlockLock already in progress for', address, '— reusing pending request');
+      return this._pendingUnlock.get(address);
+    }
+    const promise = this._doUnlockLock(address);
+    this._pendingUnlock.set(address, promise);
+    try {
+      return await promise;
+    } finally {
+      this._pendingUnlock.delete(address);
+    }
+  }
+
+  async _doUnlockLock(address) {
     const lock = this.pairedLocks.get(address);
     if (lock === undefined) {
       console.log('Unlock: lock not in pairedLocks:', address);
@@ -481,6 +508,20 @@ class Manager extends EventEmitter {
   }
 
   async lockLock(address) {
+    if (this._pendingLock.has(address)) {
+      console.log('lockLock already in progress for', address, '— reusing pending request');
+      return this._pendingLock.get(address);
+    }
+    const promise = this._doLockLock(address);
+    this._pendingLock.set(address, promise);
+    try {
+      return await promise;
+    } finally {
+      this._pendingLock.delete(address);
+    }
+  }
+
+  async _doLockLock(address) {
     const lock = this.pairedLocks.get(address);
     if (lock === undefined) {
       console.log('Lock: lock not in pairedLocks:', address);
@@ -1170,15 +1211,31 @@ class Manager extends EventEmitter {
       // fresh entries. Keep noCache=false so the cache is merged — passing noCache=true
       // makes the SDK re-fetch from sequence 0 (dozens of BLE round-trips, unreliable).
       if (reload) lock.newEvents = true;
-      // Do NOT wrap in withTimeout: a full all=true sweep on a cold cache is
-      // dozens–hundreds of BLE round-trips and legitimately exceeds any fixed
-      // cap. The SDK loop is already bounded (maxRetry, failedSequences>10 stop,
-      // probe, `if(!isConnected) break`). Wrapping also leaked the still-running
-      // SDK promise while the finally released the mutex → "Command already in
-      // progress" — same reason connect() is never wrapped in this file.
       const startedAt = Date.now();
       console.log('getOperationLog: starting full fetch for', address, reload ? '(reload)' : '');
-      const operations = structuredClone(await lock.getOperationLog(true, false));
+      // Timeout: force-disconnect so the SDK's internal loop exits via the
+      // `if(!isConnected) break` path — the getOperationLog promise then resolves
+      // cleanly rather than being leaked while the mutex is released.
+      // La pause 1 s après disconnect laisse le SDK sortir avant qu'on rejette
+      // et relâche le mutex, évitant "Command already in progress" sur la prochaine connexion.
+      const OPLOG_TIMEOUT_MS = 120000;
+      let timeoutHandle;
+      const operationsPromise = lock.getOperationLog(true, false);
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutHandle = setTimeout(async () => {
+          console.warn(`getOperationLog: timeout après ${OPLOG_TIMEOUT_MS / 1000}s pour ${address} — déconnexion forcée`);
+          if (lock.isConnected()) await lock.disconnect().catch(() => {});
+          await new Promise((r) => setTimeout(r, 1000));
+          reject(new Error(`BLE timeout (getOperationLog ${address})`));
+        }, OPLOG_TIMEOUT_MS);
+      });
+      let rawOps;
+      try {
+        rawOps = await Promise.race([operationsPromise, timeoutPromise]);
+      } finally {
+        clearTimeout(timeoutHandle);
+      }
+      const operations = structuredClone(rawOps);
       console.log(`getOperationLog: ${operations.filter(Boolean).length} entries for ${address} in ${Date.now() - startedAt}ms`);
       return operations.filter(Boolean).map((op) => this._enrichOperation(op));
     } catch (error) {
@@ -1441,8 +1498,8 @@ class Manager extends EventEmitter {
       }
       const result = await this._connectAttempt(lock, address, needsAdmin, attempt);
       if (result === true) return true;
-      // Exponential-ish back-off: 1.5 s, 3 s, 4.5 s between retries.
-      if (attempt < 4) await sleep(attempt * 1500);
+      // Exponential-ish back-off: 1 s, 2 s, 3 s between retries.
+      if (attempt < 4) await sleep(attempt * 1000);
     }
     console.log('All connect attempts failed for', address);
     this.waitingForConnect.delete(address);
@@ -1462,6 +1519,23 @@ class Manager extends EventEmitter {
       this._mutexReleases.delete(address);
       release();
     }
+  }
+
+  /**
+   * Persist current feature flags for a lock into deviceInfoData.
+   * Only triggers a disk write when something changed (store deduplicates).
+   * Safe to call after connect(false) or connect(true) — connect(true) does not
+   * clear feature flags, so the stored values remain accurate.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  _saveLockFeatures(lock) {
+    store.setLockFeatures(lock.getAddress(), {
+      hasAutoLock: lock.hasAutolock(),
+      hasPasscode: lock.hasPassCode(),
+      hasCard: lock.hasICCard(),
+      hasFinger: lock.hasFingerprint(),
+      hasAudio: lock.hasLockSound()
+    });
   }
 
   // Called by every user operation in a finally block to release the waitingForConnect
@@ -1662,6 +1736,7 @@ class Manager extends EventEmitter {
           console.error('Failed to read deviceInfo for', lock.getAddress(), ':', err.message);
         }
       }
+      this._saveLockFeatures(lock);
       this.emit('lockConnected', lock);
     } else {
       console.log('Connected to new lock ' + lock.getAddress());
@@ -1771,7 +1846,25 @@ class Manager extends EventEmitter {
     // Strategy: never set lock.newEvents=false here except after a failed connect where we
     // genuinely want a retry on the next ad. For cooldown/busy paths we schedule a deferred
     // reset so the retry happens after the cooldown expires rather than immediately.
-    const OPLOG_COOLDOWN_MS = 60 * 1000;
+    // 25 s : compromis entre réactivité des capteurs MQTT (last_operation /
+    // last_access) et trafic BLE / batterie de la serrure. Plusieurs
+    // événements rapprochés (déverrouillage + auto-verrouillage) restent
+    // remontés rapidement plutôt que différés jusqu'à la minute.
+    const OPLOG_COOLDOWN_MS = 25 * 1000;
+    // Circuit breaker : après des échecs consécutifs de connect(true)/admin-login,
+    // _scheduleNewEventsBackoff ouvre une fenêtre de cooldown exponentielle. Tant
+    // qu'elle est ouverte, on ignore complètement les pubs newEvents — c'est ce qui
+    // stoppe la tempête de reconnexion (No response to checkAdmin → retry toutes les
+    // ~3 s à l'infini, batterie de la serrure vidée, log noyé).
+    if (lock._newEventsCooldownUntil && Date.now() < lock._newEventsCooldownUntil) {
+      if (!lock._newEventsResetTimer) {
+        lock._newEventsResetTimer = setTimeout(() => {
+          lock._newEventsResetTimer = null;
+          lock.newEvents = false; // re-emit on next advertisement → one retry
+        }, lock._newEventsCooldownUntil - Date.now());
+      }
+      return;
+    }
     if (lock._lastOperationLogFetch && Date.now() - lock._lastOperationLogFetch < OPLOG_COOLDOWN_MS) {
       // Still within cooldown — don't reconnect, don't touch lock.newEvents (avoid spam loop).
       // Schedule a one-shot reset so we retry once the cooldown expires.
@@ -1806,17 +1899,21 @@ class Manager extends EventEmitter {
         return false;
       });
       if (!result) {
-        lock.newEvents = false; // connect failed — allow retry on next advertisement
+        this._scheduleNewEventsBackoff(lock); // connect failed — back off, don't spam
         return;
       }
       weConnected = true;
       await this._processOperationLog(lock);
+      // BLE link worked — clear the failure breaker so the lock returns to the
+      // normal fast (~25 s) oplog cadence (self-healing).
+      lock._newEventsFailCount = 0;
+      lock._newEventsCooldownUntil = 0;
     } catch (error) {
       // lock.connect() can throw "NobleDevice is not connected" if BLE disconnects
       // during readBasicInfo(). Swallow it here — _onLockUpdated is called via EventEmitter
       // and has no awaiter, so any unhandled rejection becomes an uncaughtException.
       console.error('_onLockUpdated connect/process error:', error.message);
-      lock.newEvents = false; // connect failed — allow retry on next advertisement
+      this._scheduleNewEventsBackoff(lock); // connect failed — back off, don't spam
     } finally {
       // Disconnect inside the mutex so the next user op gets a clean session — this also
       // serves as the cleanup path for the withTimeout above (forces SDK to drop any
@@ -1826,6 +1923,38 @@ class Manager extends EventEmitter {
       }
       release();
     }
+  }
+
+  /**
+   * Exponential back-off circuit breaker for the newEvents branch.
+   *
+   * Resetting lock.newEvents=false right after a failed connect(true)/admin-login
+   * makes the SDK re-emit on the very next advertisement → a reconnect storm every
+   * ~3 s (drains the lock battery, floods the log) when the lock never answers
+   * checkAdmin or the BLE link is flaky. Instead, grow a per-lock cooldown window:
+   * 25 s, 50 s, 100 s … capped at 10 min. lock.newEvents stays true during the
+   * window (no false→true transition → SDK stays quiet); a deferred timer flips it
+   * back so exactly one retry fires after the back-off. A successful oplog fetch
+   * resets the counter (see _handleNewEventsUpdate), so recovery is automatic.
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  _scheduleNewEventsBackoff(lock) {
+    const BASE_MS = 25 * 1000; // matches OPLOG_COOLDOWN_MS
+    const MAX_MS = 10 * 60 * 1000; // cap: at most one retry every 10 min
+    lock._newEventsFailCount = (lock._newEventsFailCount || 0) + 1;
+    const backoff = Math.min(BASE_MS * 2 ** (lock._newEventsFailCount - 1), MAX_MS);
+    lock._newEventsCooldownUntil = Date.now() + backoff;
+    console.warn(
+      `newEvents: échec #${lock._newEventsFailCount} pour ${lock.getAddress()} — ` +
+      `prochaine tentative dans ${Math.round(backoff / 1000)} s`
+    );
+    if (lock._newEventsResetTimer) {
+      clearTimeout(lock._newEventsResetTimer);
+    }
+    lock._newEventsResetTimer = setTimeout(() => {
+      lock._newEventsResetTimer = null;
+      lock.newEvents = false; // re-emit on next advertisement → one retry
+    }, backoff);
   }
 
   /**

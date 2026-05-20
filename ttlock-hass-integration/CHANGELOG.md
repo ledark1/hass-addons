@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.9.15] - 2026-05-20
+
+### Amélioration des performances de connexion
+
+- **ESP32 — délai post-déconnexion BLE réduit** : `ble_api.cpp` — `vTaskDelay` après déconnexion réduit de 1000 ms à 200 ms. Économise 800 ms à chaque cycle lock/unlock
+- **ESP32 — délai entre retries BLE réduit** : `ble_api.cpp` — délai entre tentatives de connexion BLE réduit de 1000 ms à 500 ms. Économise jusqu'à 2 s sur les connexions initiales qui nécessitent plusieurs essais
+- **Addon — reprise du monitor plus rapide** : `manager.js` — délai de `_scheduleGatewayRecovery` réduit de 2500 ms à 500 ms. Le monitor BLE redémarre 2 s plus tôt après un reconnect WebSocket
+- **Addon — reconnexion WebSocket plus rapide** : `manager.js` — configuration du `reconnecting-websocket` (RWS) du SDK avec `minReconnectionDelay: 300 ms` et `connectionTimeout: 2000 ms` (au lieu de 1000 ms et 4000 ms par défaut). La reconnexion après une coupure réseau est 700 ms plus rapide. Appliqué de façon défensive (feature-detected) dans `_attachGatewayWatchdog`
+
 ## [1.9.10] - 2026-05-15
 
 ### Gateway noble : UI, reprise du monitor, fail-fast
