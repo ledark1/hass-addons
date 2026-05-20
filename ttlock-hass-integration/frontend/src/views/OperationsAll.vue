@@ -83,6 +83,7 @@
           <template #item.recordTypeCategory="{ item }">
             <v-icon v-if="item.recordTypeCategory === 'LOCK'" color="error" size="20">mdi-lock</v-icon>
             <v-icon v-else-if="item.recordTypeCategory === 'UNLOCK'" color="success" size="20">mdi-lock-open-variant</v-icon>
+            <v-icon v-else-if="item.recordTypeCategory === 'ALARM'" color="warning" size="20">mdi-shield-lock-open</v-icon>
           </template>
           <template #item.operateDate="{ item }">
             <span class="text-caption">{{ dateTime(item.operateDate) }}</span>

@@ -1264,6 +1264,8 @@ class Manager extends EventEmitter {
       operation.recordTypeCategory = 'UNLOCK';
     } else if (LogOperateCategory.FAILED.includes(operation.recordType)) {
       operation.recordTypeCategory = 'FAILED';
+    } else if (LogOperateCategory.ALARM.includes(operation.recordType)) {
+      operation.recordTypeCategory = 'ALARM';
     } else {
       operation.recordTypeCategory = 'OTHER';
     }

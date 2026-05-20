@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.23] - 2026-05-20
+
+### Icône anomalie de capteur dans le journal d'activité
+
+- **Catégorie ALARM** : `_enrichOperation()` dans `manager.js` mappe maintenant `LogOperateCategory.ALARM` (DOOR_SENSOR_ANOMALY, TAMPER_ALARM, LOW_BATTERY_ALARM…) vers `recordTypeCategory = 'ALARM'` au lieu de `'OTHER'`
+- **Icône `mdi-shield-lock-open`** : les entrées ALARM affichent l'icône en orange dans `OperationsAll.vue` et `Operations.vue`
+
 ## [1.9.22] - 2026-05-20
 
 ### AppTopBar : icône gateway unique avec menu déroulant
