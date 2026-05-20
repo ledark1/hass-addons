@@ -182,6 +182,20 @@ class WsApi {
     this._send(message.toJSON());
   }
 
+  async sendEsp32Reboot(success) {
+    const message = new Message();
+    message.setType('esp32Reboot');
+    message.setData({ success });
+    this._send(message.toJSON());
+  }
+
+  async sendGatewayRestart(success) {
+    const message = new Message();
+    message.setType('gatewayRestart');
+    message.setData({ success });
+    this._send(message.toJSON());
+  }
+
   async sendOperationLog(address, operations) {
     const message = new Message();
     message.setType('operations');

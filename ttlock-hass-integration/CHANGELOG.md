@@ -1,5 +1,66 @@
 # Changelog
 
+## [1.9.22] - 2026-05-20
+
+### AppTopBar : icône gateway unique avec menu déroulant
+
+- **Refonte de la zone gateway** : le chip + 2 boutons séparés sont remplacés par une seule icône cliquable. Icône verte (`mdi-lan-connect`) si connecté, rouge (`mdi-lan-disconnect`) si déconnecté, orange (`mdi-help-network`) sinon. Spinner si une opération est en cours
+- **Menu déroulant** : un clic ouvre un `v-menu` avec deux actions — *Reconnecter le gateway* et *Redémarrer la passerelle ESP32* — désactivées pendant une opération en cours
+- **Tooltip au survol** : conserve le texte d'état (host si connecté, message d'erreur sinon)
+
+## [1.9.21] - 2026-05-20
+
+### Fix : détection de fin de reboot ESP32 — reconnexion noble WS forcée
+
+- **Cause racine** : le TCP du noble WebSocket (addon ↔ ESP32) reste "accroché" après le reboot car le protocole noble n'a pas de ping/pong applicatif. `_setGatewayStatus('disconnected')` ne se déclenchait jamais → `_esp32RebootPending` restait `true` → spinner 60s, aucune notification
+- **Reconnexion forcée** : `rebootEsp32()` — après un succès (ECONNRESET ou HTTP 200), programme `ws.reconnect()` après 2 s. Force le cycle `close → open` sur le noble WS → `_setGatewayStatus('disconnected')` puis `'connected'` → `_esp32RebootPending = false` → snackbar *Passerelle ESP32 redémarrée*
+- **Déduplication** : `rebootEsp32()` retourne immédiatement si `_esp32RebootPending` est déjà vrai (empêche un double-reboot si deux clients WS envoient la commande en même temps)
+- **`settle()` one-shot** : remplace les `resolve()/this._esp32RebootPending=true` en doublon. Empêche le cas où `req.destroy()` (timeout) émet lui-même ECONNRESET et poserait faussement `_esp32RebootPending = true`
+- **Fail-fast `_connectLock` corrigé** : le guard `_esp32RebootPending` attend maintenant que le flag redevienne `false` (plutôt que `_waitForGatewayReady` qui retournait `true` immédiatement si `gatewayStatus === 'connected'`)
+
+## [1.9.20] - 2026-05-20
+
+### Fail-fast BLE + résilience WS pendant le reboot ESP32
+
+- **Fail-fast `_connectLock` pendant le reboot** : `manager.js` — quand `_esp32RebootPending = true`, `_connectLock` appelle `_waitForGatewayReady(20000)` avant de tenter la connexion BLE. L'ESP32 met 10-15s à redémarrer ; pendant cette fenêtre le gateway est encore marqué `connected` mais les connexions BLE échouent. Le guard attend silencieusement le retour du gateway au lieu de logguer `newEvents: échec #1`
+- **`clearWaitingFlags` ne touche plus `waitingEsp32Reboot`** : `store/index.js` — si le WS frontend↔addon se coupe pendant le reboot (redémarrage HA, ingress), le flag reste actif. Le spinner persiste et la notice `Passerelle ESP32 redémarrée` s'affiche bien quand le gateway revient en ligne. Nettoyage assuré par `setGatewayStatus('connected')` (chemin normal) ou le timeout 60s de sécurité
+
+## [1.9.19] - 2026-05-20
+
+### Notification de fin de reboot ESP32
+
+- **Log backend** : quand la passerelle revient en ligne après un reboot ESP32, `_setGatewayStatus('connected')` détecte le flag `_esp32RebootPending` et affiche `[Gateway] ESP32 redémarré — passerelle de retour en ligne` (à la place du message d'état générique)
+- **Snackbar frontend** : la mutation `setGatewayStatus('connected')` pousse automatiquement la notice `notices.gateway.esp32RebootComplete` quand `waitingEsp32Reboot` était actif — `Notices.vue` affiche un snackbar vert *"Passerelle ESP32 redémarrée — connexion rétablie"* (fr) / *"ESP32 gateway rebooted — connection restored"* (en)
+- **Couches impactées** : `manager.js` (`_esp32RebootPending`, `rebootEsp32`, `_setGatewayStatus`), `store/index.js` (mutation `setGatewayStatus`), locales fr/en (`notices.gateway.esp32RebootComplete`)
+
+## [1.9.18] - 2026-05-20
+
+### Fix : spinner ESP32 reboot — rester actif jusqu'à la reconnexion complète
+
+- **Spinner prolongé** : `_onEsp32Reboot` ne vide plus `waitingEsp32Reboot` sur succès HTTP. Le spinner reste actif jusqu'à ce que `gatewayStatus` redevienne `'connected'` (signal naturel de fin de reboot, ~10-15s). Timeout de sécurité à 60s si l'ESP32 ne revient pas
+- **Bouton reconnect désactivé** pendant le reboot ESP32 : `:disabled="isRebootingEsp32"` sur le bouton `mdi-lan-pending` empêche l'utilisateur de cliquer sur "reconnecter gateway" pendant que l'ESP32 reboot, évitant les `restartGateway` involontaires observés dans les logs
+- **`setGatewayStatus('connected')` efface `waitingEsp32Reboot`** dans la mutation Vuex : quand le WS se reconnecte après le reboot, le flag est automatiquement vidé
+
+## [1.9.17] - 2026-05-20
+
+### Bouton "Redémarrer la passerelle ESP32" dans AppTopBar
+
+- **Nouveau bouton `mdi-restart`** : quand un gateway noble est configuré, un bouton de redémarrage matériel apparaît à côté du bouton de reconnexion WS. Un clic envoie un `GET https://gateway_host:443/restart` avec Basic Auth (credentials de la config gateway). L'ESP32 répond 200 puis exécute `ESP.restart()` après 2 itérations de loop
+- **Certificat auto-signé** : la requête HTTPS utilise `rejectUnauthorized: false` (cert auto-généré côté ESP32, comportement standard)
+- **Spinner** : couvre uniquement la phase HTTP (1-5s) ; la puce gateway affiche ensuite le cycle `disconnected → connecting → connected` automatiquement via les mécanismes existants
+- **Retour d'erreur** : si l'ESP32 est inaccessible ou les credentials incorrects, un snackbar d'erreur est affiché
+- **Aucune modification côté ESP32** : l'endpoint `/restart` est déjà présent dans `web.cpp`
+- **Couches impactées** : `manager.rebootEsp32()` (import `node:https`), `WsApi.sendEsp32Reboot()`, `case 'rebootEsp32'` dans le dispatcher, `api.rebootEsp32()` + `_onEsp32Reboot()` (frontend), store (`waitingEsp32Reboot`), `AppTopBar.vue`, locales fr/en
+
+## [1.9.16] - 2026-05-20
+
+### Bouton "Reconnecter le gateway" dans AppTopBar
+
+- **Nouveau bouton dans la barre** : quand un gateway noble est configuré, un bouton `mdi-lan-pending` apparaît à côté de la puce gateway. Un clic force une reconnexion WebSocket (via `ws.reconnect()` sur le socket RWS interne) sans redémarrer l'addon ni l'ESP32
+- **Indicateur de progression** : le bouton affiche un spinner pendant la reconnexion (jusqu'à 15 s) et se remet à jour automatiquement via le statut gateway existant
+- **Retour d'erreur** : si le gateway ne répond pas dans les 15 s, un snackbar d'erreur est affiché
+- **Couches impactées** : `manager.restartGateway()` (backend), `WsApi.sendGatewayRestart()`, `case 'restartGateway'` dans le dispatcher, `api.restartGateway()` + `_onGatewayRestart()` (frontend), store (`waitingGatewayRestart`), `AppTopBar.vue`, locales fr/en
+
 ## [1.9.15] - 2026-05-20
 
 ### Amélioration des performances de connexion

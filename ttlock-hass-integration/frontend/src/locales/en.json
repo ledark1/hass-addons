@@ -14,7 +14,9 @@
       "connected": "Noble gateway connected — {host}",
       "connecting": "Connecting to the noble gateway…",
       "disconnected": "Noble gateway disconnected — locks are unreachable",
-      "unknown": "Noble gateway status unavailable"
+      "unknown": "Noble gateway status unavailable",
+      "restart": "Reconnect gateway",
+      "rebootEsp32": "Reboot the ESP32 gateway"
     }
   },
   "nav": {
@@ -136,6 +138,9 @@
       "add": "PIN code added",
       "update": "PIN code updated",
       "delete": "PIN code deleted"
+    },
+    "gateway": {
+      "esp32RebootComplete": "ESP32 gateway rebooted — connection restored"
     }
   },
   "card": {

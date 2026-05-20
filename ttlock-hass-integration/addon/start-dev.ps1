@@ -12,7 +12,7 @@ $env:DATA_PATH = "$PSScriptRoot\dev-data"   # local folder instead of /data
 $env:GATEWAY = "noble"
 $env:GATEWAY_HOST = "192.168.135.111" # IP or hostname of the noble gateway
 $env:GATEWAY_PORT = "8080"            # WebSocket port (default 8080)
-$env:GATEWAY_KEY = "3A26B726B9F08E5A674D1E7125AE9B27"   # AES key configured in the gateway
+$env:GATEWAY_KEY = "9A9578A93853A038C175CA1AB17B6EB5"   # AES key configured in the gateway
 $env:GATEWAY_USER = "admin"        # WebSocket auth username (if any)
 $env:GATEWAY_PASS = "admin"        # WebSocket auth password (if any)
 

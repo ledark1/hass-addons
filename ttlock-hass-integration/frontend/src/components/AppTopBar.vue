@@ -57,27 +57,36 @@
           </template>
         </v-tooltip>
 
-        <v-tooltip v-if="showGatewayChip" :text="gatewayStatusTxt" location="bottom">
-          <template #activator="{ props }">
-            <v-chip
-              v-bind="props"
-              :color="gatewayChipColor"
-              variant="tonal"
-              size="small"
-              class="mr-1"
-            >
-              <v-progress-circular
-                v-if="gatewayStatus === 'connecting'"
-                indeterminate
-                size="14"
-                width="2"
-                class="mr-1"
-              />
-              <v-icon v-else start size="14">{{ gatewayIcon }}</v-icon>
-              {{ $t('app.gateway.label') }}
-            </v-chip>
+        <v-menu v-if="showGatewayChip" location="bottom end">
+          <template #activator="{ props: menuProps }">
+            <v-tooltip :text="gatewayStatusTxt" location="bottom">
+              <template #activator="{ props: tooltipProps }">
+                <v-btn
+                  v-bind="{ ...menuProps, ...tooltipProps }"
+                  :icon="isRestartingGateway || isRebootingEsp32 ? null : gatewayIcon"
+                  :loading="isRestartingGateway || isRebootingEsp32"
+                  :color="gatewayChipColor"
+                  variant="text"
+                  size="small"
+                />
+              </template>
+            </v-tooltip>
           </template>
-        </v-tooltip>
+          <v-list density="compact" min-width="220">
+            <v-list-item
+              :title="$t('app.gateway.restart')"
+              prepend-icon="mdi-lan-pending"
+              :disabled="isRestartingGateway || isRebootingEsp32"
+              @click="$store.dispatch('restartGateway')"
+            />
+            <v-list-item
+              :title="$t('app.gateway.rebootEsp32')"
+              prepend-icon="mdi-restart"
+              :disabled="isRestartingGateway || isRebootingEsp32"
+              @click="$store.dispatch('rebootEsp32')"
+            />
+          </v-list>
+        </v-menu>
 
         <v-tooltip :text="$t('app.editConfig')" location="bottom">
           <template #activator="{ props }">
@@ -193,6 +202,12 @@ export default {
     },
     isWaitingCredentials() {
       return this.$store.state.waitingCredentials
+    },
+    isRestartingGateway() {
+      return this.$store.state.waitingGatewayRestart
+    },
+    isRebootingEsp32() {
+      return this.$store.state.waitingEsp32Reboot
     },
     activeLockName() {
       const addr = this.$route.params.address

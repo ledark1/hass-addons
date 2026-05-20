@@ -239,6 +239,22 @@ class Api {
     );
   }
 
+  async restartGateway() {
+    this.ws.send(
+      JSON.stringify({
+        type: 'restartGateway'
+      })
+    );
+  }
+
+  async rebootEsp32() {
+    this.ws.send(
+      JSON.stringify({
+        type: 'rebootEsp32'
+      })
+    );
+  }
+
   async _onMessage(messageEvent) {
     try {
       const message = JSON.parse(messageEvent.data);
@@ -287,6 +303,12 @@ class Api {
         break;
       case 'operations':
         this._onOperations(message.data);
+        break;
+      case 'gatewayRestart':
+        this._onGatewayRestart(message.data);
+        break;
+      case 'esp32Reboot':
+        this._onEsp32Reboot(message.data);
         break;
     }
   }
@@ -372,6 +394,28 @@ class Api {
     if (this._pendingRequest?.type === 'operations') this._pendingRequest = null;
     if (data?.address !== undefined && data?.operations !== undefined) {
       this.store.commit('setOperations', data);
+    }
+  }
+
+  _onGatewayRestart(data) {
+    this.store.commit('setWaitingGatewayRestart', false);
+    if (!data?.success) {
+      this.store.commit('setError', { message: 'Gateway reconnection failed (timeout)' });
+    }
+  }
+
+  _onEsp32Reboot(data) {
+    if (!data?.success) {
+      this.store.commit('setWaitingEsp32Reboot', false);
+      this.store.commit('setError', { message: 'ESP32 reboot request failed (unreachable or auth error)' });
+    } else {
+      // Keep spinner until the WS reconnects (cleared by setGatewayStatus → 'connected').
+      // Safety fallback: clear after 60 s if the ESP32 never comes back.
+      if (this._esp32RebootTimeout) clearTimeout(this._esp32RebootTimeout);
+      this._esp32RebootTimeout = setTimeout(() => {
+        this._esp32RebootTimeout = null;
+        this.store.commit('setWaitingEsp32Reboot', false);
+      }, 60000);
     }
   }
 }

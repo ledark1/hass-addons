@@ -34,7 +34,9 @@ const store = createStore({
     waitingAutoLock: false,
     waitingSettings: false,
     waitingCalibrate: false,
-    calibrateSuccess: null
+    calibrateSuccess: null,
+    waitingGatewayRestart: false,
+    waitingEsp32Reboot: false
   },
   mutations: {
     setReady(state) {
@@ -48,6 +50,10 @@ const store = createStore({
     },
     setGatewayStatus(state, status) {
       state.gatewayStatus = status;
+      if (status === 'connected' && state.waitingEsp32Reboot) {
+        state.notices.push({ message: 'notices.gateway.esp32RebootComplete' });
+      }
+      if (status === 'connected') state.waitingEsp32Reboot = false;
     },
     setGatewayHost(state, host) {
       state.gatewayHost = host;
@@ -185,6 +191,12 @@ const store = createStore({
     setCalibrateSuccess(state, success) {
       state.calibrateSuccess = success;
     },
+    setWaitingGatewayRestart(state, isWaiting) {
+      state.waitingGatewayRestart = isWaiting;
+    },
+    setWaitingEsp32Reboot(state, isWaiting) {
+      state.waitingEsp32Reboot = isWaiting;
+    },
     setWaitingOperations(state, isWaiting) {
       state.waitingOperations = isWaiting;
     },
@@ -202,6 +214,10 @@ const store = createStore({
       state.waitingAutoLock = false;
       state.waitingSettings = false;
       state.waitingCalibrate = false;
+      state.waitingGatewayRestart = false;
+      // waitingEsp32Reboot is NOT cleared here — the 60s safety timeout and
+      // setGatewayStatus('connected') handle cleanup. Clearing it here would
+      // lose the completion notice if the WS drops mid-reboot and reconnects.
     }
   },
   actions: {
@@ -288,6 +304,16 @@ const store = createStore({
       if (state.waiting) return;
       commit('setWaiting');
       api.unpair(lockAddress);
+    },
+    async restartGateway({ state, commit }) {
+      if (state.waitingGatewayRestart) return;
+      commit('setWaitingGatewayRestart', true);
+      api.restartGateway();
+    },
+    async rebootEsp32({ state, commit }) {
+      if (state.waitingEsp32Reboot) return;
+      commit('setWaitingEsp32Reboot', true);
+      api.rebootEsp32();
     }
   }
 });

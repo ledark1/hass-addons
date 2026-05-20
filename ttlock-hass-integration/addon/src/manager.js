@@ -1,4 +1,5 @@
 import EventEmitter from 'node:events';
+import https from 'node:https';
 import store from './store.js';
 import { TTLockClient, AudioManage, LockedStatus, LogOperateCategory, LogOperateNames } from '@domodom30/ttlock-sdk-js';
 
@@ -96,6 +97,8 @@ class Manager extends EventEmitter {
     this._gatewayWatchdogInterval = undefined;
     /** @type {boolean} re-entrancy guard for _ensureMonitoring */
     this._ensuringMonitor = false;
+    /** @type {boolean} true between a successful rebootEsp32() call and the next 'connected' event */
+    this._esp32RebootPending = false;
   }
 
   async init() {
@@ -197,12 +200,101 @@ class Manager extends EventEmitter {
   }
 
   /**
+   * Force a reconnect of the noble WebSocket gateway.
+   * Closes the current socket (reconnecting-websocket will reopen it automatically),
+   * then waits up to 15 s for the link to come back up.
+   * @returns {Promise<boolean>} true if the gateway is connected again within the timeout
+   */
+  async restartGateway() {
+    if (this.gateway !== 'noble') return false;
+    const ws = this.client?.bleService?.scanner?.noble?._bindings?.ws;
+    if (!ws || typeof ws.reconnect !== 'function') {
+      console.warn('[Gateway] restartGateway: socket interne introuvable');
+      return false;
+    }
+    console.log('[Gateway] Reconnexion forcée…');
+    this._setGatewayStatus('connecting');
+    ws.reconnect();
+    const ready = await this._waitForGatewayReady(15000);
+    console.log(ready ? '[Gateway] Reconnexion réussie' : '[Gateway] Timeout lors de la reconnexion');
+    return ready;
+  }
+
+  /**
+   * Trigger a hardware reboot of the ESP32 gateway via its HTTPS /restart endpoint.
+   * The ESP32 cert is self-signed so certificate validation is disabled.
+   * @returns {Promise<boolean>} true if the ESP32 acknowledged the reboot request
+   */
+  async rebootEsp32() {
+    if (this.gateway !== 'noble') return false;
+    // Deduplicate: if a reboot is already in progress, don't send a second request.
+    if (this._esp32RebootPending) return true;
+    return new Promise((resolve) => {
+      const auth = Buffer.from(`${this.gateway_user}:${this.gateway_pass}`).toString('base64');
+      const options = {
+        hostname: this.gateway_host,
+        port: 443,
+        path: '/restart',
+        method: 'GET',
+        rejectUnauthorized: false,
+        headers: { 'Authorization': `Basic ${auth}` },
+        timeout: 10000
+      };
+      // One-shot settler so the timeout→destroy path cannot trigger a false
+      // _esp32RebootPending=true via the ECONNRESET that req.destroy() may emit.
+      let settled = false;
+      const settle = (success) => {
+        if (settled) return;
+        settled = true;
+        if (success) {
+          this._esp32RebootPending = true;
+          // The noble WS TCP connection will hang indefinitely after the ESP32
+          // reboots (no application-level ping on the noble protocol). Force a
+          // reconnect cycle after a short delay so the watchdog properly fires
+          // the close→open events that drive _setGatewayStatus and the UI notice.
+          setTimeout(() => {
+            const ws = this.client?.bleService?.scanner?.noble?._bindings?.ws;
+            if (ws && typeof ws.reconnect === 'function') {
+              console.log('[Gateway] rebootEsp32: reconnexion noble WS forcée');
+              ws.reconnect();
+            }
+          }, 2000);
+        }
+        resolve(success);
+      };
+      const req = https.request(options, (res) => {
+        res.resume();
+        console.log(`[Gateway] ESP32 reboot HTTP ${res.statusCode}`);
+        settle(res.statusCode === 200);
+      });
+      req.on('timeout', () => { req.destroy(); settle(false); });
+      req.on('error', (err) => {
+        // ECONNRESET is expected: the ESP32 closes the TCP connection while
+        // rebooting, before Node.js can finish reading the response.
+        if (err.code === 'ECONNRESET') {
+          console.log('[Gateway] rebootEsp32: connexion fermée par l\'ESP32 (reboot en cours)');
+          settle(true);
+        } else {
+          console.warn('[Gateway] rebootEsp32 HTTP error:', err.message);
+          settle(false);
+        }
+      });
+      req.end();
+    });
+  }
+
+  /**
    * @param {'n/a'|'connecting'|'connected'|'disconnected'|'unknown'} status
    */
   _setGatewayStatus(status) {
     if (this.gatewayStatus === status) return;
     this.gatewayStatus = status;
-    console.log(`[Gateway] État du lien: ${status}`);
+    if (status === 'connected' && this._esp32RebootPending) {
+      this._esp32RebootPending = false;
+      console.log('[Gateway] ESP32 redémarré — passerelle de retour en ligne');
+    } else {
+      console.log(`[Gateway] État du lien: ${status}`);
+    }
     this.emit('gatewayStatusChanged', status);
   }
 
@@ -1462,6 +1554,20 @@ class Manager extends EventEmitter {
     // Remove from connectQueue so that _onLockDisconnected / _scheduleRetry won't
     // reschedule a retry once the mutex is ours.
     this.connectQueue.delete(address);
+    // Fail-fast: ESP32 is rebooting — wait for _esp32RebootPending to clear
+    // (set to false by _setGatewayStatus('connected') when the ESP32 is back).
+    // _waitForGatewayReady is not used here because gatewayStatus may still be
+    // 'connected' while the TCP connection is hanging pre-disconnect.
+    if (this.gateway === 'noble' && this._esp32RebootPending) {
+      const deadline = Date.now() + 25000;
+      while (this._esp32RebootPending && Date.now() < deadline) {
+        await sleep(200);
+      }
+      if (this._esp32RebootPending) {
+        console.warn(`ESP32 en cours de redémarrage — connexion à ${address} différée`);
+        return false;
+      }
+    }
     // Fail-fast: with a noble gateway down, every BLE command resolves to
     // "Disconnected while waiting for response". Hammering 4 attempts ×
     // backoff per op is pure noise and delays recovery — wait briefly for the

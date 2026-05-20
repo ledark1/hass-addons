@@ -14,7 +14,9 @@
       "connected": "Gateway noble connecté — {host}",
       "connecting": "Connexion au gateway noble en cours…",
       "disconnected": "Gateway noble déconnecté — les serrures ne sont pas joignables",
-      "unknown": "État du gateway noble indisponible"
+      "unknown": "État du gateway noble indisponible",
+      "restart": "Reconnecter le gateway",
+      "rebootEsp32": "Redémarrer la passerelle ESP32"
     }
   },
   "nav": {
@@ -136,6 +138,9 @@
       "add": "Code PIN ajouté",
       "update": "Code PIN modifié",
       "delete": "Code PIN supprimé"
+    },
+    "gateway": {
+      "esp32RebootComplete": "Passerelle ESP32 redémarrée — connexion rétablie"
     }
   },
   "card": {

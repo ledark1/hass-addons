@@ -303,6 +303,16 @@ async function handleUnpair(api, msg) {
   if (!res) api.sendError('Failed to unpair lock', msg);
 }
 
+async function handleRestartGateway(api) {
+  const success = await manager.restartGateway();
+  api.sendGatewayRestart(success);
+}
+
+async function handleRebootEsp32(api) {
+  const success = await manager.rebootEsp32();
+  api.sendEsp32Reboot(success);
+}
+
 // ── main message dispatcher ──────────────────────────────────────────────────
 
 async function onMessage(wss, api, ws, message) {
@@ -348,6 +358,12 @@ async function onMessage(wss, api, ws, message) {
       break;
     case 'unpair':
       await handleUnpair(api, msg);
+      break;
+    case 'restartGateway':
+      await handleRestartGateway(api);
+      break;
+    case 'rebootEsp32':
+      await handleRebootEsp32(api);
       break;
   }
 }
