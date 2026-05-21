@@ -48,6 +48,9 @@ class HomeAssistant {
     manager.on('lockLock', this._onLockLock.bind(this));
     manager.on('lockUpdated', this._onLockBatteryUpdated.bind(this));
     manager.on('lockUnpaired', this._onLockUnpaired.bind(this));
+    // Mise à jour rapide de l'état (LOCK/UNLOCK) depuis le cache BLE, sans attendre
+    // la lecture complète du journal opérationnel (qui prend 5–15 s).
+    manager.on('lockStateUpdated', this._onLockStateUpdated.bind(this));
   }
 
   /** Schedule a single reconnection attempt (guarded against duplicates). */
@@ -438,6 +441,18 @@ class HomeAssistant {
    */
   async _onLockLock(lock) {
     await this._refreshLock(lock);
+  }
+
+  /**
+   * Mise à jour rapide de l'état de la serrure (battery/rssi/state) depuis le cache BLE,
+   * émise par _handleLockedStatusUpdate avant que la connexion BLE soit établie pour lire
+   * le journal opérationnel. Ne publie PAS last_operation ni last_access (données pas encore
+   * disponibles à cet instant — elles seront publiées par _onLockUnlock/_onLockLock après
+   * la lecture complète du log via _processOperationLog).
+   * @param {import('ttlock-sdk-js').TTLock} lock
+   */
+  async _onLockStateUpdated(lock) {
+    await this.updateLockState(lock);
   }
 
   /**

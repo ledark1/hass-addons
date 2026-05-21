@@ -16,7 +16,8 @@
       "disconnected": "Noble gateway disconnected — locks are unreachable",
       "unknown": "Noble gateway status unavailable",
       "restart": "Reconnect gateway",
-      "rebootEsp32": "Reboot the ESP32 gateway"
+      "rebootEsp32": "Reboot the ESP32 gateway",
+      "openWeb": "Open gateway web interface"
     }
   },
   "nav": {

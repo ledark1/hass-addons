@@ -95,6 +95,20 @@
                 <span class="text-caption">{{ $t('app.gateway.rebootEsp32') }}</span>
               </template>
             </v-list-item>
+            <v-divider class="my-1" />
+            <v-list-item
+              v-if="gatewayHost"
+              :href="`https://${gatewayHost}`"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <template #prepend>
+                <v-icon color="primary" size="18" class="mr-3">mdi-open-in-new</v-icon>
+              </template>
+              <template #title>
+                <span class="text-caption">{{ $t('app.gateway.openWeb') }}</span>
+              </template>
+            </v-list-item>
           </v-list>
         </v-menu>
 

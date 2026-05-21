@@ -11,12 +11,13 @@
     },
     "gateway": {
       "label": "Gateway",
-      "connected": "Gateway noble connecté — {host}",
-      "connecting": "Connexion au gateway noble en cours…",
-      "disconnected": "Gateway noble déconnecté — les serrures ne sont pas joignables",
-      "unknown": "État du gateway noble indisponible",
-      "restart": "Reconnecter le gateway",
-      "rebootEsp32": "Redémarrer la passerelle ESP32"
+      "connected": "Passerelle connectée — {host}",
+      "connecting": "Connexion à la passerelle en cours…",
+      "disconnected": "Passerelle déconnectée — les serrures ne sont pas joignables",
+      "unknown": "État de la passerelle indisponible",
+      "restart": "Reconnecter la passerelle",
+      "rebootEsp32": "Redémarrer la passerelle",
+      "openWeb": "Ouvrir l'interface web de la passerelle"
     }
   },
   "nav": {

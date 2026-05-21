@@ -1954,11 +1954,13 @@ class Manager extends EventEmitter {
     // Strategy: never set lock.newEvents=false here except after a failed connect where we
     // genuinely want a retry on the next ad. For cooldown/busy paths we schedule a deferred
     // reset so the retry happens after the cooldown expires rather than immediately.
-    // 25 s : compromis entre réactivité des capteurs MQTT (last_operation /
-    // last_access) et trafic BLE / batterie de la serrure. Plusieurs
-    // événements rapprochés (déverrouillage + auto-verrouillage) restent
-    // remontés rapidement plutôt que différés jusqu'à la minute.
-    const OPLOG_COOLDOWN_MS = 25 * 1000;
+    // Configurable via l'option addon `oplog_cooldown` (env OPLOG_COOLDOWN, en secondes).
+    // Défaut 10 s : compromis entre réactivité des capteurs MQTT (last_operation /
+    // last_access) et trafic BLE / batterie de la serrure. Une valeur plus courte permet
+    // de capturer l'auto-verrouillage (ex. T+12 s) sans attendre la fin du précédent
+    // cooldown de 25 s. Le circuit-breaker exponentiel protège contre les storms de
+    // reconnexion en cas d'échec répété.
+    const OPLOG_COOLDOWN_MS = (parseInt(process.env.OPLOG_COOLDOWN, 10) || 10) * 1000;
     // Circuit breaker : après des échecs consécutifs de connect(true)/admin-login,
     // _scheduleNewEventsBackoff ouvre une fenêtre de cooldown exponentielle. Tant
     // qu'elle est ouverte, on ignore complètement les pubs newEvents — c'est ce qui
@@ -2067,7 +2069,14 @@ class Manager extends EventEmitter {
 
   /**
    * Handle the lockedStatus branch of _onLockUpdated.
-   * Emits lockLock/lockUnlock based on current or cached lock status.
+   * Emits lockStateUpdated (état seul, sans last_operation) basé sur le statut courant
+   * ou mis en cache depuis l'advertisement BLE.
+   *
+   * On utilise un événement dédié `lockStateUpdated` (et non `lockLock`/`lockUnlock`) pour
+   * éviter de publier des données `last_operation` périmées : le journal opérationnel n'a
+   * pas encore été lu à cet instant (la connexion BLE est en cours dans _handleNewEventsUpdate).
+   * Les événements `lockLock`/`lockUnlock` restent émis depuis _processOperationLog, après
+   * lecture complète du log, ce qui déclenche la publication de last_operation/last_access.
    * @param {import('ttlock-sdk-js').TTLock} lock
    */
   async _handleLockedStatusUpdate(lock) {
@@ -2075,18 +2084,14 @@ class Manager extends EventEmitter {
     // When not connected, rely on the cached status from the advertisement.
     if (lock.isConnected()) {
       const status = await lock.getLockStatus();
-      if (status == LockedStatus.LOCKED) {
-        this.emit('lockLock', lock);
-      } else if (status == LockedStatus.UNLOCKED) {
-        this.emit('lockUnlock', lock);
+      if (status == LockedStatus.LOCKED || status == LockedStatus.UNLOCKED) {
+        this.emit('lockStateUpdated', lock);
       }
     } else {
-      // Use cached status from BLE advertisement (no connection needed)
+      // Use cached status from BLE advertisement (no connection needed — < 10 ms)
       const status = lock.getLockStatus();
-      if (status == LockedStatus.LOCKED) {
-        this.emit('lockLock', lock);
-      } else if (status == LockedStatus.UNLOCKED) {
-        this.emit('lockUnlock', lock);
+      if (status == LockedStatus.LOCKED || status == LockedStatus.UNLOCKED) {
+        this.emit('lockStateUpdated', lock);
       }
     }
   }
@@ -2097,17 +2102,25 @@ class Manager extends EventEmitter {
    */
   async _onLockUpdated(lock, paramsChanged) {
     console.log('lockUpdated', paramsChanged);
-    if (paramsChanged.newEvents === true && lock.hasNewEvents()) {
-      await this._handleNewEventsUpdate(lock);
-    }
+    // Publier l'état immédiatement depuis le cache BLE (pas de connexion BLE requise).
+    // Ne pas attendre _handleNewEventsUpdate (5–15 s) avant de notifier HA du changement
+    // d'état : lockedStatus utilise les données de l'advertisement en mémoire et retourne
+    // en < 10 ms lorsque la serrure n'est pas connectée.
     if (paramsChanged.lockedStatus === true) {
-      await this._handleLockedStatusUpdate(lock);
+      this._handleLockedStatusUpdate(lock).catch((e) =>
+        console.error('_handleLockedStatusUpdate error:', e.message)
+      );
     }
     if (paramsChanged.batteryCapacity === true) {
       this.emit('lockUpdated', lock);
       this.emit('lockBatteryUpdated', lock);
     }
+    // Connexion BLE pour lire le journal opérationnel (5–15 s) — lancé après le
+    // fire-and-forget lockedStatus pour ne pas bloquer cette branche lente.
     // Connect/disconnect for the newEvents branch is handled inside _handleNewEventsUpdate.
+    if (paramsChanged.newEvents === true && lock.hasNewEvents()) {
+      await this._handleNewEventsUpdate(lock);
+    }
   }
 
   async _processOperationLog(lock) {

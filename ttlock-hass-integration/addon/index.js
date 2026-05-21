@@ -63,5 +63,8 @@ init({
   gateway_port: process.env.GATEWAY_PORT || 2846,
   gateway_key: process.env.GATEWAY_KEY,
   gateway_user: process.env.GATEWAY_USER,
-  gateway_pass: process.env.GATEWAY_PASS
+  gateway_pass: process.env.GATEWAY_PASS,
+  // Cooldown en secondes entre deux lectures du journal opérationnel (option addon oplog_cooldown).
+  // Manager.js lit process.env.OPLOG_COOLDOWN directement ; cette entrée documente le paramètre.
+  oplog_cooldown: parseInt(process.env.OPLOG_COOLDOWN, 10) || 10
 });
