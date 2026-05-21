@@ -2136,12 +2136,17 @@ class Manager extends EventEmitter {
       for (let op of operations) {
         if (LogOperateCategory.UNLOCK.includes(op.recordType)) {
           lastStatus = LockedStatus.UNLOCKED;
-          this.emit('lockUnlock', lock);
         } else if (LogOperateCategory.LOCK.includes(op.recordType)) {
           lastStatus = LockedStatus.LOCKED;
-          this.emit('lockLock', lock);
         }
       }
+      // Émettre une seule fois pour l'état final — toutes les ops sont déjà
+      // persistées dans lockData.json avant cette boucle (le SDK les écrit lors
+      // du getOperationLog()), donc publishLastOperation() lira le même "dernier
+      // événement" quel que soit le nombre d'émissions. N émissions → N
+      // publications MQTT identiques → N faux changements d'état dans HA.
+      if (lastStatus === LockedStatus.UNLOCKED) this.emit('lockUnlock', lock);
+      else if (lastStatus === LockedStatus.LOCKED) this.emit('lockLock', lock);
       const status = await lock.getLockStatus();
       if (lastStatus != LockedStatus.UNKNOWN && status != lastStatus) {
         if (status == LockedStatus.LOCKED) {

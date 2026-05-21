@@ -37,6 +37,19 @@ class HomeAssistant {
     this.discovery_prefix = options.discovery_prefix || 'homeassistant';
     /** @type {Map<string, string>} address → last published name (alias or SDK name) */
     this.configuredLocks = new Map();
+    /**
+     * Déduplication des publications retained pour last_operation / last_access.
+     * Clé : adresse MAC ; Valeur : recordNumber du dernier payload publié.
+     * Réinitialisée à chaque redémarrage de l'addon → la première connexion MQTT
+     * de la session publie toujours (cas redémarrage du broker). Les reconnexions
+     * suivantes (session identique, recordNumber inchangé) sautent la publication
+     * pour éviter que HA enregistre un faux changement d'état à l'heure de
+     * reconnexion.
+     * @type {Map<string, number|null>}
+     */
+    this._lastPublishedOpRecord = new Map();
+    /** @type {Map<string, number|null>} */
+    this._lastPublishedUnlockRecord = new Map();
 
     this.connected = false;
     this._connecting = false;
@@ -48,8 +61,6 @@ class HomeAssistant {
     manager.on('lockLock', this._onLockLock.bind(this));
     manager.on('lockUpdated', this._onLockBatteryUpdated.bind(this));
     manager.on('lockUnpaired', this._onLockUnpaired.bind(this));
-    // Mise à jour rapide de l'état (LOCK/UNLOCK) depuis le cache BLE, sans attendre
-    // la lecture complète du journal opérationnel (qui prend 5–15 s).
     manager.on('lockStateUpdated', this._onLockStateUpdated.bind(this));
   }
 
@@ -251,6 +262,36 @@ class HomeAssistant {
         }
       },
       {
+        component: 'sensor',
+        objectId: 'last_operation_time',
+        payload: {
+          unique_id: 'ttlock_' + id + '_last_operation_time',
+          name: name + ' Last operation time',
+          device: device,
+          device_class: 'timestamp',
+          icon: 'mdi:clock-check',
+          // Même topic que last_operation — extrait le champ timestamp (ms → s)
+          state_topic: lastOperationTopic(id),
+          value_template: "{{ (value_json.timestamp | int(0) / 1000) | timestamp_utc }}",
+          ...avail
+        }
+      },
+      {
+        component: 'sensor',
+        objectId: 'last_access_time',
+        payload: {
+          unique_id: 'ttlock_' + id + '_last_access_time',
+          name: name + ' Last access time',
+          device: device,
+          device_class: 'timestamp',
+          icon: 'mdi:clock-check-outline',
+          // Même topic que last_access — extrait le champ timestamp (ms → s)
+          state_topic: lastUnlockTopic(id),
+          value_template: "{{ (value_json.timestamp | int(0) / 1000) | timestamp_utc }}",
+          ...avail
+        }
+      },
+      {
         component: 'binary_sensor',
         objectId: 'connectivity',
         payload: {
@@ -263,19 +304,13 @@ class HomeAssistant {
           payload_off: PAYLOAD_OFFLINE,
           // Depends on the bridge only so it stays visible/historised even
           // when the lock itself is offline.
-          availability: [
-            { topic: BRIDGE_AVAILABILITY_TOPIC, payload_available: PAYLOAD_ONLINE, payload_not_available: PAYLOAD_OFFLINE }
-          ]
+          availability: [{ topic: BRIDGE_AVAILABILITY_TOPIC, payload_available: PAYLOAD_ONLINE, payload_not_available: PAYLOAD_OFFLINE }]
         }
       }
     ];
 
     for (const entity of entities) {
-      await this._publish(
-        discoveryConfigTopic(this.discovery_prefix, entity.component, id, entity.objectId),
-        entity.payload,
-        { retain: true, qos: 1 }
-      );
+      await this._publish(discoveryConfigTopic(this.discovery_prefix, entity.component, id, entity.objectId), entity.payload, { retain: true, qos: 1 });
     }
 
     this.configuredLocks.set(address, name);
@@ -340,14 +375,22 @@ class HomeAssistant {
   async publishLastOperation(lock) {
     if (!this.connected) return;
     try {
-      const ops = manager.getPersistedOperationLog(lock.getAddress());
+      const address = lock.getAddress();
+      const ops = manager.getPersistedOperationLog(address);
       const last = latestOperation(ops);
       if (!last) return;
-      const id = lockIdFromAddress(lock.getAddress());
+      // Déduplication : skip si le recordNumber n'a pas changé depuis la
+      // dernière publication (même session). Évite un faux changement d'état
+      // dans HA à chaque reconnexion MQTT lorsque aucune nouvelle opération
+      // n'a eu lieu.
+      const lastRecord = last.recordNumber ?? null;
+      if (this._lastPublishedOpRecord.get(address) === lastRecord) return;
+      const id = lockIdFromAddress(address);
       await this._publish(lastOperationTopic(id), buildLastOperationPayload(last), {
         retain: true,
         qos: 1
       });
+      this._lastPublishedOpRecord.set(address, lastRecord);
     } catch (error) {
       console.error('MQTT publishLastOperation error:', error.message);
     }
@@ -363,14 +406,19 @@ class HomeAssistant {
   async publishLastUnlock(lock) {
     if (!this.connected) return;
     try {
-      const ops = manager.getPersistedOperationLog(lock.getAddress());
+      const address = lock.getAddress();
+      const ops = manager.getPersistedOperationLog(address);
       const last = latestUnlock(ops);
       if (!last) return;
-      const id = lockIdFromAddress(lock.getAddress());
+      // Déduplication : même logique que publishLastOperation.
+      const lastRecord = last.recordNumber ?? null;
+      if (this._lastPublishedUnlockRecord.get(address) === lastRecord) return;
+      const id = lockIdFromAddress(address);
       await this._publish(lastUnlockTopic(id), buildLastOperationPayload(last), {
         retain: true,
         qos: 1
       });
+      this._lastPublishedUnlockRecord.set(address, lastRecord);
     } catch (error) {
       console.error('MQTT publishLastUnlock error:', error.message);
     }
@@ -476,6 +524,8 @@ class HomeAssistant {
       discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'rssi'),
       discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_operation'),
       discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_access'),
+      discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_operation_time'),
+      discoveryConfigTopic(this.discovery_prefix, 'sensor', id, 'last_access_time'),
       discoveryConfigTopic(this.discovery_prefix, 'binary_sensor', id, 'connectivity')
     ];
     for (const topic of discoveryTopics) {
@@ -489,6 +539,8 @@ class HomeAssistant {
       await this._publish(topic, '', { retain: true });
     }
     this.configuredLocks.delete(lock.getAddress());
+    this._lastPublishedOpRecord.delete(lock.getAddress());
+    this._lastPublishedUnlockRecord.delete(lock.getAddress());
   }
 
   /**
