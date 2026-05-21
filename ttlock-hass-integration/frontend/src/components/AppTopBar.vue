@@ -97,8 +97,8 @@
             </v-list-item>
             <v-divider class="my-1" />
             <v-list-item
-              v-if="gatewayHost"
-              :href="`https://${gatewayHost}`"
+              v-if="gatewayWebUrl"
+              :href="gatewayWebUrl"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -187,7 +187,13 @@ export default {
       return this.$store.state.gatewayStatus
     },
     gatewayHost() {
-      return this.$store.state.gatewayHost
+      return this.$store.state.gatewayHost  // format 'host:port' (port = WebSocket BLE)
+    },
+    // Extrait uniquement l'IP/hostname depuis 'host:port' pour construire l'URL HTTPS.
+    // Le port de gatewayHost est celui du WebSocket BLE (8080), pas de l'interface web.
+    gatewayWebUrl() {
+      const ip = this.gatewayHost.split(':')[0]
+      return ip ? `https://${ip}` : null
     },
     // Always show the chip when a gateway is configured (status !== 'n/a').
     // Connected = discreet success chip with the IP on hover; otherwise it
