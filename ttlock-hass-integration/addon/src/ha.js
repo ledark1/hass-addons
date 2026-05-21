@@ -270,9 +270,13 @@ class HomeAssistant {
           device: device,
           device_class: 'timestamp',
           icon: 'mdi:clock-check',
-          // Même topic que last_operation — extrait le champ timestamp (ms → s)
+          // Même topic que last_operation — extrait timestamp (ISO 8601).
+          // On vérifie que c'est bien une string ISO (contient '-') pour rejeter
+          // les anciens messages retained au format entier compact YYYYMMDDHHmmss.
+          // On ajoute le décalage horaire local de HA (ex. +02:00) car HA exige
+          // un datetime timezone-aware pour device_class: timestamp.
           state_topic: lastOperationTopic(id),
-          value_template: "{{ value_json.timestamp }}",
+          value_template: "{{ value_json.timestamp ~ (now() | string)[-6:] if value_json.timestamp is string and '-' in value_json.timestamp else None }}",
           ...avail
         }
       },
@@ -285,9 +289,9 @@ class HomeAssistant {
           device: device,
           device_class: 'timestamp',
           icon: 'mdi:clock-check-outline',
-          // Même topic que last_access — extrait le champ timestamp (ms → s)
+          // Même logique que last_operation_time.
           state_topic: lastUnlockTopic(id),
-          value_template: "{{ value_json.timestamp }}",
+          value_template: "{{ value_json.timestamp ~ (now() | string)[-6:] if value_json.timestamp is string and '-' in value_json.timestamp else None }}",
           ...avail
         }
       },
