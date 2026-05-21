@@ -139,7 +139,7 @@ test('buildLastOperationPayload', () => {
     by: 'Carte Alice',
     record_type: 4,
     record_number: 42,
-    timestamp: '2026-05-15 09:30:00',
+    timestamp: '2026-05-15T09:30:00', // ISO 8601 converti depuis le format compact YYYYMMDDHHmmss
     battery: 0 // numeric 0 kept, not coerced to null
   });
 });
@@ -150,4 +150,16 @@ test('buildLastOperationPayload falls back to password then null', () => {
   const nothing = buildLastOperationPayload({ recordType: 1 });
   assert.equal(nothing.by, null);
   assert.equal(nothing.event, null);
+});
+
+test('buildLastOperationPayload timestamp: compact YYYYMMDDHHmmss → ISO 8601', () => {
+  // Format entier brut du SDK TTLock (ex. serrure réelle)
+  assert.equal(buildLastOperationPayload({ operateDate: 20260520205751 }).timestamp, '2026-05-20T20:57:51');
+  // Format string avec séparateurs (valeur de test / affichée)
+  assert.equal(buildLastOperationPayload({ operateDate: '2026-05-20 20:57:51' }).timestamp, '2026-05-20T20:57:51');
+  // Sans secondes (12 chiffres, padded)
+  assert.equal(buildLastOperationPayload({ operateDate: 202605201957 }).timestamp, '2026-05-20T19:57:00');
+  // Absent
+  assert.equal(buildLastOperationPayload({ operateDate: null }).timestamp, null);
+  assert.equal(buildLastOperationPayload({}).timestamp, null);
 });

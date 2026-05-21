@@ -272,7 +272,7 @@ class HomeAssistant {
           icon: 'mdi:clock-check',
           // Même topic que last_operation — extrait le champ timestamp (ms → s)
           state_topic: lastOperationTopic(id),
-          value_template: "{{ (value_json.timestamp | int(0) / 1000) | timestamp_utc }}",
+          value_template: "{{ value_json.timestamp }}",
           ...avail
         }
       },
@@ -287,7 +287,7 @@ class HomeAssistant {
           icon: 'mdi:clock-check-outline',
           // Même topic que last_access — extrait le champ timestamp (ms → s)
           state_topic: lastUnlockTopic(id),
-          value_template: "{{ (value_json.timestamp | int(0) / 1000) | timestamp_utc }}",
+          value_template: "{{ value_json.timestamp }}",
           ...avail
         }
       },

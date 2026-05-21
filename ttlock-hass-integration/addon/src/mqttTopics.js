@@ -159,9 +159,29 @@ export function latestUnlock(operations) {
 }
 
 /**
+ * Convert a TTLock compact date (YYYYMMDDHHmmss as integer or formatted string)
+ * to an ISO 8601 string ("YYYY-MM-DDTHH:mm:ss") suitable for HA timestamp
+ * sensors. Strips all non-digit characters so it handles both the raw SDK
+ * format (20260520205751) and the formatted display string ("2026-05-20 20:57:51").
+ * Returns null when the value is absent or too short to be a valid date.
+ * @param {number|string|null|undefined} compact
+ * @returns {string|null}
+ */
+function operateDateToIso(compact) {
+  if (compact == null) return null;
+  const digits = String(compact).replace(/\D/g, '');
+  if (digits.length < 12) return null; // need at least YYYYMMDDHHmm
+  const d = digits.padEnd(14, '0');
+  return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}T${d.slice(8, 10)}:${d.slice(10, 12)}:${d.slice(12, 14)}`;
+}
+
+/**
  * Build the JSON payload for the "last operation" sensor from an enriched
  * operation (recordTypeName / recordTypeCategory / passwordName added by
  * manager._enrichOperation). Numeric fields use `??` so a real 0 is kept.
+ * The `timestamp` field is an ISO 8601 string converted from the TTLock
+ * compact date format (YYYYMMDDHHmmss) so HA timestamp sensors can consume
+ * it directly via `{{ value_json.timestamp }}`.
  * @param {object} op
  */
 export function buildLastOperationPayload(op) {
@@ -171,7 +191,7 @@ export function buildLastOperationPayload(op) {
     by: op.passwordName || op.password || null,
     record_type: op.recordType ?? null,
     record_number: op.recordNumber ?? null,
-    timestamp: op.operateDate ?? null,
+    timestamp: operateDateToIso(op.operateDate),
     battery: op.electricQuantity ?? null
   };
 }
