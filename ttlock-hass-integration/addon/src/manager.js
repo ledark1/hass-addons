@@ -2069,8 +2069,8 @@ class Manager extends EventEmitter {
 
   /**
    * Handle the lockedStatus branch of _onLockUpdated.
-   * Emits lockStateUpdated (état seul, sans last_operation) basé sur le statut courant
-   * ou mis en cache depuis l'advertisement BLE.
+   * Emits lockStateUpdated (état seul, sans last_operation) basé sur le statut
+   * mis à jour par le SDK depuis l'advertisement BLE.
    *
    * On utilise un événement dédié `lockStateUpdated` (et non `lockLock`/`lockUnlock`) pour
    * éviter de publier des données `last_operation` périmées : le journal opérationnel n'a
@@ -2080,19 +2080,13 @@ class Manager extends EventEmitter {
    * @param {import('ttlock-sdk-js').TTLock} lock
    */
   async _handleLockedStatusUpdate(lock) {
-    // Only call getLockStatus() if already connected (it may try to connect otherwise).
-    // When not connected, rely on the cached status from the advertisement.
-    if (lock.isConnected()) {
-      const status = await lock.getLockStatus();
-      if (status == LockedStatus.LOCKED || status == LockedStatus.UNLOCKED) {
-        this.emit('lockStateUpdated', lock);
-      }
-    } else {
-      // Use cached status from BLE advertisement (no connection needed — < 10 ms)
-      const status = lock.getLockStatus();
-      if (status == LockedStatus.LOCKED || status == LockedStatus.UNLOCKED) {
-        this.emit('lockStateUpdated', lock);
-      }
+    // updateFromTTDevice du SDK a déjà mis lockedStatus à LOCKED/UNLOCKED avant
+    // d'émettre 'updated' avec paramsChanged.lockedStatus=true, donc getLockStatus()
+    // retourne ici depuis le cache sans déclencher de commande BLE — quel que soit
+    // l'état de connexion.
+    const status = await lock.getLockStatus();
+    if (status == LockedStatus.LOCKED || status == LockedStatus.UNLOCKED) {
+      this.emit('lockStateUpdated', lock);
     }
   }
 
