@@ -261,10 +261,19 @@ class Store {
     }
     try {
       const tmpDeviceInfo = this.settingsPath + '/deviceInfoData.json.tmp';
-      await fs.writeFile(tmpDeviceInfo, Buffer.from(JSON.stringify(this.deviceInfoData)));
+      // S'assurer que le répertoire existe avant d'écrire (utile en dev ou premier démarrage).
+      await fs.mkdir(this.settingsPath, { recursive: true }).catch((mkdirErr) => {
+        if (mkdirErr.code !== 'EEXIST') console.warn('deviceInfoData mkdir failed:', mkdirErr.message);
+      });
+      try {
+        await fs.writeFile(tmpDeviceInfo, Buffer.from(JSON.stringify(this.deviceInfoData)));
+      } catch (writeErr) {
+        console.error('deviceInfoData writeFile failed:', writeErr.message);
+        throw writeErr;
+      }
       await this.fileDataRename(tmpDeviceInfo, this.settingsPath + '/deviceInfoData.json');
     } catch (error) {
-      console.error(error);
+      console.error('deviceInfoData save error:', error.message);
     }
   }
 }
