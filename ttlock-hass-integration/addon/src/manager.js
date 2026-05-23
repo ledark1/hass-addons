@@ -405,9 +405,13 @@ class Manager extends EventEmitter {
   async _ensureMonitoring() {
     if (this.gateway !== 'noble' || this.gatewayStatus !== 'connected') return;
     if (this._ensuringMonitor) return;
-    // BLE path busy — the active flow (scan / lock op / queued connect)
+    // BLE path busy — the active flow (scan / lock op / queued connect / newEvents background read)
     // restarts the monitor itself when it finishes.
-    if (this.scanning || this.waitingForConnect.size > 0 || this.connectQueue.size > 0) return;
+    // _bleMutex.size > 0 : _handleNewEventsUpdate holds the mutex during connect(true) +
+    // getOperationLog(). startMonitor() here would trigger a Noble HCI scan-enable while a
+    // BLE connection is open, which on many adapters interrupts the connection and causes
+    // onDisconnected → adminAuth=false → _processOperationLog returns false → échec #1 loop.
+    if (this.scanning || this.waitingForConnect.size > 0 || this.connectQueue.size > 0 || this._bleMutex.size > 0) return;
     if (this.client?.isMonitoring?.()) return;
 
     this._ensuringMonitor = true;
