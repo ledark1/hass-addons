@@ -1970,11 +1970,13 @@ class Manager extends EventEmitter {
     // reset so the retry happens after the cooldown expires rather than immediately.
     // Configurable via l'option addon `oplog_cooldown` (env OPLOG_COOLDOWN, en secondes).
     // Défaut 10 s : compromis entre réactivité des capteurs MQTT (last_operation /
-    // last_access) et trafic BLE / batterie de la serrure. Une valeur plus courte permet
-    // de capturer l'auto-verrouillage (ex. T+12 s) sans attendre la fin du précédent
-    // cooldown de 25 s. Le circuit-breaker exponentiel protège contre les storms de
-    // reconnexion en cas d'échec répété.
-    const OPLOG_COOLDOWN_MS = (parseInt(process.env.OPLOG_COOLDOWN, 10) || 10) * 1000;
+    // last_access) et trafic BLE / batterie de la serrure. Défaut : 60 s — la serrure
+    // diffuse newEvents=true dans TOUS ses advertisements même après lecture ; sans ce
+    // cooldown, on se reconnecte toutes les ~15 s en permanence (drain de batterie).
+    // 60 s est un compromis : délai de notification max 60 s, ~1 connexion/minute.
+    // Réductible via l'option addon `oplog_cooldown` (en secondes) si plus de réactivité
+    // est souhaitée (ex. 20 s pour capturer les auto-verrouillages T+12 s).
+    const OPLOG_COOLDOWN_MS = (parseInt(process.env.OPLOG_COOLDOWN, 10) || 60) * 1000;
     // Circuit breaker : après des échecs consécutifs de connect(true)/admin-login,
     // _scheduleNewEventsBackoff ouvre une fenêtre de cooldown exponentielle. Tant
     // qu'elle est ouverte, on ignore complètement les pubs newEvents — c'est ce qui
