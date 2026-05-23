@@ -2197,7 +2197,8 @@ class Manager extends EventEmitter {
       // du getOperationLog()), donc publishLastOperation() lira le même "dernier
       // événement" quel que soit le nombre d'émissions. N émissions → N
       // publications MQTT identiques → N faux changements d'état dans HA.
-      console.log('_processOperationLog: succès pour', lock.getAddress(), `(${operations.length} op(s))`);
+      const opSummary = operations.map(op => `#${op.recordNumber} type=${op.recordType}`).join(', ');
+      console.log('_processOperationLog: succès pour', lock.getAddress(), `(${operations.length} op(s): ${opSummary})`);
       if (lastStatus === LockedStatus.UNLOCKED) this.emit('lockUnlock', lock);
       else if (lastStatus === LockedStatus.LOCKED) this.emit('lockLock', lock);
       const status = await lock.getLockStatus();
