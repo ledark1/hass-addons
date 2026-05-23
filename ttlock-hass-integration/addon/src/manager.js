@@ -2184,21 +2184,39 @@ class Manager extends EventEmitter {
       lock.newEvents = false;
       lock._lastOperationLogFetch = Date.now();
       if (!Array.isArray(operations)) return false;
+      // Filtrer les opérations déjà traitées lors d'une lecture précédente.
+      // Le firmware TTLock continue à retourner les mêmes entrées (ex. DOOR_SENSOR,
+      // type=30) dans ses advertisements newEvents tant qu'elles ne sont pas
+      // acquittées par le cloud — ce qui n'est pas possible en offline. Sans ce
+      // filtre, on émettrait lockUnlock/lockLock à chaque cycle (~60 s) pour des
+      // événements historiques, déclenchant des automations HA en boucle.
+      // _lastProcessedRecordNumber est chargé depuis deviceInfoData.json au premier
+      // appel pour survivre aux redémarrages de l'addon.
+      if (lock._lastProcessedRecordNumber === undefined) {
+        lock._lastProcessedRecordNumber = store.getLastProcessedRecord(lock.getAddress());
+      }
+      const threshold = lock._lastProcessedRecordNumber;
+      const newOps = operations.filter(op => op.recordNumber > threshold);
+      const opSummary = operations.map(op => `#${op.recordNumber} type=${op.recordType}`).join(', ');
+      if (newOps.length > 0) {
+        const maxRecord = Math.max(...newOps.map(op => op.recordNumber));
+        lock._lastProcessedRecordNumber = maxRecord;
+        store.setLastProcessedRecord(lock.getAddress(), maxRecord);
+        console.log('_processOperationLog: succès pour', lock.getAddress(),
+          `(${operations.length} op(s): ${opSummary}, ${newOps.length} nouvelles)`);
+      } else {
+        console.log('_processOperationLog: succès pour', lock.getAddress(),
+          `(${operations.length} op(s): ${opSummary}, aucune nouvelle — déjà traitées)`);
+      }
+      // Émettre une seule fois pour l'état final des NOUVELLES opérations uniquement.
       let lastStatus = LockedStatus.UNKNOWN;
-      for (let op of operations) {
+      for (let op of newOps) {
         if (LogOperateCategory.UNLOCK.includes(op.recordType)) {
           lastStatus = LockedStatus.UNLOCKED;
         } else if (LogOperateCategory.LOCK.includes(op.recordType)) {
           lastStatus = LockedStatus.LOCKED;
         }
       }
-      // Émettre une seule fois pour l'état final — toutes les ops sont déjà
-      // persistées dans lockData.json avant cette boucle (le SDK les écrit lors
-      // du getOperationLog()), donc publishLastOperation() lira le même "dernier
-      // événement" quel que soit le nombre d'émissions. N émissions → N
-      // publications MQTT identiques → N faux changements d'état dans HA.
-      const opSummary = operations.map(op => `#${op.recordNumber} type=${op.recordType}`).join(', ');
-      console.log('_processOperationLog: succès pour', lock.getAddress(), `(${operations.length} op(s): ${opSummary})`);
       if (lastStatus === LockedStatus.UNLOCKED) this.emit('lockUnlock', lock);
       else if (lastStatus === LockedStatus.LOCKED) this.emit('lockLock', lock);
       const status = await lock.getLockStatus();

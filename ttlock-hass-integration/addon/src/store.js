@@ -143,6 +143,29 @@ class Store {
     return this.deviceInfoData[address]?.features;
   }
 
+  /**
+   * Persist the highest operation log recordNumber already processed for a lock.
+   * Used by _processOperationLog to avoid re-emitting stale operations that the
+   * firmware keeps returning (e.g. DOOR_SENSOR events never acknowledged by cloud).
+   * @param {string} address Lock MAC address
+   * @param {number} recordNumber
+   */
+  setLastProcessedRecord(address, recordNumber) {
+    if (!address || typeof recordNumber !== 'number') return;
+    if (!this.deviceInfoData[address]) this.deviceInfoData[address] = {};
+    if (this.deviceInfoData[address].lastProcessedRecord === recordNumber) return; // no-op
+    this.deviceInfoData[address].lastProcessedRecord = recordNumber;
+    this.saveData();
+  }
+
+  /**
+   * @param {string} address Lock MAC address
+   * @returns {number} last processed recordNumber, or 0 if unknown
+   */
+  getLastProcessedRecord(address) {
+    return this.deviceInfoData[address]?.lastProcessedRecord || 0;
+  }
+
   async loadData() {
     try {
       await fs.access(this.settingsPath + '/lockData.json');
