@@ -49,7 +49,7 @@
       </v-tooltip>
 
       <!-- Titre app (non-mobile) -->
-      <span v-if="!mobile" class="text-body-1 font-weight-bold">TTLock</span>
+      <span v-if="!mobile" class="text-body-1 font-weight-bold ml-1">TTLock</span>
     </div>
 
     <!-- CENTRE : onglets de navigation (non-mobile) -->
