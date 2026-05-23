@@ -1430,18 +1430,18 @@ class Manager extends EventEmitter {
    */
   async _doAdminLogin(lock, address, attempt) {
     // Do NOT add any sleep here: every ms we wait reduces the chance of hitting
-    // the firmware's auth acceptance window. The 50 ms yield in _connectAttempt
+    // the firmware's auth acceptance window. The 300 ms yield in _connectAttempt
     // (before calling us) is already enough to flush stale disconnect events.
     // Send checkAdminCommand immediately while the BLE radio is still warm.
     if (!lock.isConnected()) {
       console.warn('Lock already disconnected before macro_adminLogin', address, '— retrying connect');
       return attempt < 4 ? 'retry' : 'abort';
     }
-    // SDK default (3 retries × 200 ms): some lock firmwares need 1-2 round-trips before
-    // checkAdmin stabilises (random challenge regeneration). maxRetries=1 was too aggressive
-    // and broke add/delete passcode on locks with marginal BLE — keep the full SDK budget
-    // and rely on `_doAdminLogin` returning 'retry' for cross-connect recovery.
-    const adminOk = await lock.macro_adminLogin().catch((e) => {
+    // SDK default (3 retries × 200 ms) étendu à 800 ms entre retries : certains firmwares
+    // TTLock nécessitent plus de temps pour répondre à checkAdmin, surtout après une
+    // reconnexion BLE (état transitoire du firmware). maxRetries=3 conservé pour absorber
+    // les round-trips défaillants sans exploser en 36 tentatives.
+    const adminOk = await lock.macro_adminLogin(3, 800).catch((e) => {
       console.warn('macro_adminLogin failed:', e.message);
       return false;
     });
@@ -1485,7 +1485,7 @@ class Manager extends EventEmitter {
         return false;
       }
       console.log('Connected to', address);
-      await sleep(50);
+      await sleep(300);
       if (!lock.isConnected()) {
         console.warn('Lock self-disconnected right after onConnected', address, '— retrying');
         return attempt < 4 ? 'retry' : false;
@@ -1606,8 +1606,10 @@ class Manager extends EventEmitter {
       }
       const result = await this._connectAttempt(lock, address, needsAdmin, attempt);
       if (result === true) return true;
-      // Exponential-ish back-off: 1 s, 2 s, 3 s between retries.
-      if (attempt < 4) await sleep(attempt * 1000);
+      // Exponential-ish back-off: 2 s, 4 s, 6 s between retries.
+      // Valeurs doublées (vs 1s/2s/3s) pour laisser le firmware TTLock se réinitialiser
+      // entre les tentatives quand checkAdmin ne répond pas.
+      if (attempt < 4) await sleep(attempt * 2000);
     }
     console.log('All connect attempts failed for', address);
     this.waitingForConnect.delete(address);
@@ -1708,6 +1710,14 @@ class Manager extends EventEmitter {
 
     this.emit('scanStop');
     setTimeout(() => {
+      // Ne pas relancer le monitor si une opération BLE est en cours (mutex tenu).
+      // Noble arrête le scan lors de toute connexion BLE — sans ce guard, chaque
+      // connect(true) de _handleNewEventsUpdate déclenche un _onScanStopped qui
+      // relance le monitor 200 ms plus tard, ce qui génère des advertisements
+      // parasites et des Monitor stopped/started en boucle pendant le backoff.
+      // L'opération en cours (finally de _handleNewEventsUpdate / _releaseConnect)
+      // relancera le monitor elle-même une fois terminée.
+      if (this._bleMutex.size > 0) return;
       this.client.startMonitor();
     }, 200);
   }
@@ -2013,11 +2023,27 @@ class Manager extends EventEmitter {
         return;
       }
       weConnected = true;
-      await this._processOperationLog(lock);
-      // BLE link worked — clear the failure breaker so the lock returns to the
-      // normal fast (~25 s) oplog cadence (self-healing).
-      lock._newEventsFailCount = 0;
-      lock._newEventsCooldownUntil = 0;
+      // Vérifier que la serrure est toujours connectée avant de lire l'oplog —
+      // connect(true) peut retourner true alors que la serrure s'est déjà
+      // déconnectée (déconnexion immédiate côté firmware). Sans ce guard,
+      // _processOperationLog lit le cache SDK et retourne true, ce qui reset
+      // le circuit-breaker à tort.
+      if (!lock.isConnected()) {
+        console.warn('Lock disconnected immediately after connect(true)', lock.getAddress(), '— backoff');
+        this._scheduleNewEventsBackoff(lock);
+        return;
+      }
+      const oplogOk = await this._processOperationLog(lock);
+      if (oplogOk) {
+        // BLE + admin login réels — clear the failure breaker so the lock returns to the
+        // normal fast (~25 s) oplog cadence (self-healing).
+        lock._newEventsFailCount = 0;
+        lock._newEventsCooldownUntil = 0;
+      } else {
+        // _processOperationLog a échoué (macro_adminLogin ou erreur de lecture) —
+        // activer le backoff exponentiel pour ne pas respammer la serrure.
+        this._scheduleNewEventsBackoff(lock);
+      }
     } catch (error) {
       // lock.connect() can throw "NobleDevice is not connected" if BLE disconnects
       // during readBasicInfo(). Swallow it here — _onLockUpdated is called via EventEmitter
@@ -2032,6 +2058,12 @@ class Manager extends EventEmitter {
         await lock.disconnect().catch(() => {});
       }
       release();
+      // Relancer le monitor si Noble l'a arrêté pendant le connect(true) et que
+      // _onScanStopped a sauté le startMonitor() (guard _bleMutex.size > 0 actif).
+      // Après release(), le mutex est libéré — on peut redémarrer le scan en toute sécurité.
+      if (!this.scanning && this._bleMutex.size === 0 && this.waitingForConnect.size === 0) {
+        this.client.startMonitor();
+      }
     }
   }
 
@@ -2042,15 +2074,15 @@ class Manager extends EventEmitter {
    * makes the SDK re-emit on the very next advertisement → a reconnect storm every
    * ~3 s (drains the lock battery, floods the log) when the lock never answers
    * checkAdmin or the BLE link is flaky. Instead, grow a per-lock cooldown window:
-   * 25 s, 50 s, 100 s … capped at 10 min. lock.newEvents stays true during the
+   * 15 s, 30 s, 60 s, 120 s … capped at 3 min. lock.newEvents stays true during the
    * window (no false→true transition → SDK stays quiet); a deferred timer flips it
    * back so exactly one retry fires after the back-off. A successful oplog fetch
    * resets the counter (see _handleNewEventsUpdate), so recovery is automatic.
    * @param {import('ttlock-sdk-js').TTLock} lock
    */
   _scheduleNewEventsBackoff(lock) {
-    const BASE_MS = 25 * 1000; // matches OPLOG_COOLDOWN_MS
-    const MAX_MS = 10 * 60 * 1000; // cap: at most one retry every 10 min
+    const BASE_MS = 15 * 1000; // premier backoff : 15 s (compromis réactivité / protection batterie)
+    const MAX_MS = 3 * 60 * 1000; // cap: au plus une tentative toutes les 3 min
     lock._newEventsFailCount = (lock._newEventsFailCount || 0) + 1;
     const backoff = Math.min(BASE_MS * 2 ** (lock._newEventsFailCount - 1), MAX_MS);
     lock._newEventsCooldownUntil = Date.now() + backoff;
@@ -2119,13 +2151,27 @@ class Manager extends EventEmitter {
 
   async _processOperationLog(lock) {
     // Prevent concurrent executions for the same lock
-    if (lock._processingOperationLog) return;
+    if (lock._processingOperationLog) return false;
     lock._processingOperationLog = true;
     try {
+      // Guard secondaire : si la serrure s'est déconnectée entre le check dans
+      // _handleNewEventsUpdate et ici (race condition), éviter de lire le cache.
+      if (!lock.isConnected()) return false;
       let operations = await lock.getOperationLog();
+      // Vérifier adminAuth APRÈS l'appel. Le SDK le positionne à true uniquement si
+      // macro_adminLogin réussit ET si la serrure ne s'est pas encore déconnectée
+      // (onDisconnected remet adminAuth à false). Si adminAuth est false ici, c'est
+      // soit un login raté (→ cache retourné) soit une déconnexion pendant la lecture
+      // (→ données partielles/invalides). Dans les deux cas : pas de vraie lecture BLE
+      // → ne pas resetter le circuit-breaker newEvents.
+      if (!lock.adminAuth) {
+        console.warn('_processOperationLog: adminAuth absent après getOperationLog pour', lock.getAddress(), '— cache ou déconnexion');
+        lock._lastOperationLogFetch = Date.now();
+        return false;
+      }
       lock.newEvents = false;
       lock._lastOperationLogFetch = Date.now();
-      if (!Array.isArray(operations)) return;
+      if (!Array.isArray(operations)) return false;
       let lastStatus = LockedStatus.UNKNOWN;
       for (let op of operations) {
         if (LogOperateCategory.UNLOCK.includes(op.recordType)) {
@@ -2149,6 +2195,7 @@ class Manager extends EventEmitter {
           this.emit('lockUnlock', lock);
         }
       }
+      return true;
     } catch (error) {
       console.error('_processOperationLog error:', error.message);
       // Reset newEvents so the next advertisement doesn't immediately re-enter this path.
@@ -2156,6 +2203,7 @@ class Manager extends EventEmitter {
       // prevents a tight retry loop when the lock keeps disconnecting during the fetch.
       lock.newEvents = false;
       lock._lastOperationLogFetch = Date.now();
+      return false;
     } finally {
       lock._processingOperationLog = false;
     }
