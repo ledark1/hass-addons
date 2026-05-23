@@ -2161,13 +2161,19 @@ class Manager extends EventEmitter {
       // Guard secondaire : si la serrure s'est déconnectée entre le check dans
       // _handleNewEventsUpdate et ici (race condition), éviter de lire le cache.
       if (!lock.isConnected()) return false;
+      // Forcer un vrai handshake BLE : si adminAuth est encore true d'une session
+      // précédente (onDisconnected pas encore traité dans l'event loop), macro_adminLogin()
+      // court-circuiterait le checkAdmin/checkRandom BLE et retournerait true immédiatement,
+      // autorisant le retour du cache oplog sans connexion admin réelle. On remet adminAuth
+      // à false pour garantir que chaque appel à getOperationLog() ici effectue un vrai login.
+      lock.adminAuth = false;
       let operations = await lock.getOperationLog();
       // Vérifier adminAuth APRÈS l'appel. Le SDK le positionne à true uniquement si
-      // macro_adminLogin réussit ET si la serrure ne s'est pas encore déconnectée
-      // (onDisconnected remet adminAuth à false). Si adminAuth est false ici, c'est
-      // soit un login raté (→ cache retourné) soit une déconnexion pendant la lecture
-      // (→ données partielles/invalides). Dans les deux cas : pas de vraie lecture BLE
-      // → ne pas resetter le circuit-breaker newEvents.
+      // macro_adminLogin réussit (checkAdmin + checkRandom BLE) ET si la serrure ne
+      // s'est pas encore déconnectée (onDisconnected remet adminAuth à false). Si
+      // adminAuth est false ici, c'est soit un login raté (→ cache retourné) soit une
+      // déconnexion pendant la lecture (→ données partielles/invalides). Dans les deux
+      // cas : pas de vraie lecture BLE → ne pas resetter le circuit-breaker newEvents.
       if (!lock.adminAuth) {
         console.warn('_processOperationLog: adminAuth absent après getOperationLog pour', lock.getAddress(), '— cache ou déconnexion');
         lock._lastOperationLogFetch = Date.now();
@@ -2189,6 +2195,7 @@ class Manager extends EventEmitter {
       // du getOperationLog()), donc publishLastOperation() lira le même "dernier
       // événement" quel que soit le nombre d'émissions. N émissions → N
       // publications MQTT identiques → N faux changements d'état dans HA.
+      console.log('_processOperationLog: succès pour', lock.getAddress(), `(${operations.length} op(s))`);
       if (lastStatus === LockedStatus.UNLOCKED) this.emit('lockUnlock', lock);
       else if (lastStatus === LockedStatus.LOCKED) this.emit('lockLock', lock);
       const status = await lock.getLockStatus();
