@@ -1,8 +1,6 @@
 <template>
   <v-app>
-    <AppSidebar v-model="drawer" />
     <AppTopBar
-      @toggle-drawer="drawer = !drawer"
       @edit-config="editConfig"
       @start-scan="startScan"
       @refresh-credentials="refreshCredentials"
@@ -21,32 +19,17 @@
 </template>
 
 <script>
-import { useDisplay } from 'vuetify'
-import AppSidebar from "@/components/AppSidebar.vue"
 import AppTopBar from "@/components/AppTopBar.vue"
 import ConfigDlg from "@/components/ConfigDlg.vue"
 import Errors from "@/components/Errors.vue"
 import Notices from "@/components/Notices.vue"
 
 export default {
-  components: { AppSidebar, AppTopBar, ConfigDlg, Errors, Notices },
-  setup() {
-    const display = useDisplay()
-    return { display }
-  },
+  components: { AppTopBar, ConfigDlg, Errors, Notices },
   data() {
     return {
       showConfigDialog: false,
-      drawer: true,
     }
-  },
-  watch: {
-    'display.smAndDown.value': {
-      immediate: true,
-      handler(isMobile) {
-        this.drawer = !isMobile
-      },
-    },
   },
   methods: {
     startScan() {

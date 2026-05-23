@@ -6,35 +6,75 @@
     border="b-thin"
     height="64"
   >
-    <v-app-bar-nav-icon
-      v-if="mobile"
-      @click="$emit('toggle-drawer')"
-    />
-
-    <div class="d-flex align-center flex-grow-1 px-4" style="min-width: 0;">
-      <v-breadcrumbs
-        :items="breadcrumbs"
-        density="compact"
-        class="pa-0"
+    <!-- GAUCHE : hamburger mobile + logo + titre -->
+    <div class="d-flex align-center gap-2 px-3">
+      <!-- Hamburger mobile → menu dropdown -->
+      <v-menu
+        v-if="mobile"
+        v-model="mobileMenuOpen"
+        location="bottom start"
+        :close-on-content-click="true"
       >
-        <template #divider>
-          <v-icon icon="mdi-chevron-right" size="16" class="text-medium-emphasis" />
+        <template #activator="{ props: menuProps }">
+          <v-app-bar-nav-icon v-bind="menuProps" />
         </template>
-        <template #item="{ item }">
-          <v-breadcrumbs-item
-            :to="item.to"
-            :disabled="item.disabled"
-            class="text-body-2"
-            :class="item.disabled ? 'text-high-emphasis font-weight-medium' : 'text-medium-emphasis'"
-          >
-            {{ item.title }}
-          </v-breadcrumbs-item>
+        <v-list density="compact" min-width="200">
+          <v-list-item
+            v-for="item in navItems"
+            :key="item.to"
+            :prepend-icon="item.icon"
+            :title="$t(item.label)"
+            :active="isActive(item)"
+            color="primary"
+            rounded="lg"
+            @click="$router.push(item.to)"
+          />
+          <v-divider class="my-1" />
+          <v-list-item
+            :prepend-icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'"
+            :title="isDark ? $t('theme.light') : $t('theme.dark')"
+            rounded="lg"
+            @click="toggleTheme"
+          />
+        </v-list>
+      </v-menu>
+
+      <!-- Logo avec tooltip version -->
+      <v-tooltip :text="`TTLock v${version}`" location="bottom">
+        <template #activator="{ props }">
+          <v-avatar v-bind="props" size="32" color="primary" style="cursor: default; flex-shrink: 0;">
+            <v-icon color="white" size="20">mdi-lock-smart</v-icon>
+          </v-avatar>
         </template>
-      </v-breadcrumbs>
+      </v-tooltip>
+
+      <!-- Titre app (non-mobile) -->
+      <span v-if="!mobile" class="text-body-1 font-weight-bold">TTLock</span>
     </div>
 
+    <!-- CENTRE : onglets de navigation (non-mobile) -->
+    <v-tabs
+      v-if="!mobile"
+      :model-value="activeTabPath"
+      class="flex-grow-1"
+      align-tabs="center"
+      color="primary"
+    >
+      <v-tab
+        v-for="item in navItems"
+        :key="item.to"
+        :value="item.to"
+        :prepend-icon="item.icon"
+        @click="$router.push(item.to)"
+      >
+        {{ $t(item.label) }}
+      </v-tab>
+    </v-tabs>
+
+    <!-- DROITE : boutons d'action -->
     <template #append>
       <div class="d-flex align-center ga-1 pr-2">
+        <!-- Indicateur de statut démarrage -->
         <v-tooltip v-if="startupStatus !== 0" :text="startupStatusTxt" location="bottom">
           <template #activator="{ props }">
             <v-chip
@@ -57,6 +97,7 @@
           </template>
         </v-tooltip>
 
+        <!-- Menu statut gateway -->
         <v-menu v-if="showGatewayChip" location="bottom end">
           <template #activator="{ props: menuProps }">
             <v-tooltip :text="gatewayStatusTxt" location="bottom">
@@ -112,6 +153,20 @@
           </v-list>
         </v-menu>
 
+        <!-- Toggle thème (non-mobile, mobile l'a dans le hamburger) -->
+        <v-tooltip v-if="!mobile" :text="$t('theme.toggle')" location="bottom">
+          <template #activator="{ props }">
+            <v-btn
+              v-bind="props"
+              :icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'"
+              variant="text"
+              size="small"
+              @click="toggleTheme"
+            />
+          </template>
+        </v-tooltip>
+
+        <!-- Modifier la configuration -->
         <v-tooltip :text="$t('app.editConfig')" location="bottom">
           <template #activator="{ props }">
             <v-btn
@@ -125,6 +180,7 @@
           </template>
         </v-tooltip>
 
+        <!-- Rafraîchir les credentials (uniquement sur la route Credentials) -->
         <v-tooltip v-if="isCredentialsRoute" :text="$t('app.refreshCredentials')" location="bottom">
           <template #activator="{ props }">
             <v-btn
@@ -138,6 +194,7 @@
           </template>
         </v-tooltip>
 
+        <!-- Lancer un scan BLE -->
         <v-tooltip :text="$t('app.startScan')" location="bottom">
           <template #activator="{ props }">
             <v-btn
@@ -153,22 +210,78 @@
         </v-tooltip>
       </div>
     </template>
+
+    <!-- EXTENSION : breadcrumbs sur les routes détail uniquement -->
+    <template v-if="showBreadcrumbs" #extension>
+      <v-breadcrumbs
+        :items="breadcrumbs"
+        density="compact"
+        class="pa-0 px-4 pb-1"
+      >
+        <template #divider>
+          <v-icon icon="mdi-chevron-right" size="16" class="text-medium-emphasis" />
+        </template>
+        <template #item="{ item }">
+          <v-breadcrumbs-item
+            :to="item.to"
+            :disabled="item.disabled"
+            class="text-body-2"
+            :class="item.disabled ? 'text-high-emphasis font-weight-medium' : 'text-medium-emphasis'"
+          >
+            {{ item.title }}
+          </v-breadcrumbs-item>
+        </template>
+      </v-breadcrumbs>
+    </template>
   </v-app-bar>
 </template>
 
 <script>
 import { useDisplay } from 'vuetify'
+import { useTheme } from '@/composables/useTheme'
 
 export default {
   name: 'AppTopBar',
-  emits: ['toggle-drawer', 'edit-config', 'start-scan', 'refresh-credentials'],
+  emits: ['edit-config', 'start-scan', 'refresh-credentials'],
   setup() {
     const display = useDisplay()
-    return { display }
+    const { isDark, toggleTheme } = useTheme()
+    return { display, isDark, toggleTheme }
+  },
+  data() {
+    return {
+      mobileMenuOpen: false,
+      navItems: [
+        { to: '/', icon: 'mdi-view-dashboard-outline', label: 'nav.dashboard', match: ['Home'] },
+        { to: '/credentials', icon: 'mdi-key-chain-variant', label: 'nav.credentials', match: ['CredentialsAll', 'Credentials'] },
+        { to: '/operations', icon: 'mdi-history', label: 'nav.operations', match: ['OperationsAll', 'Operations'] },
+        { to: '/settings', icon: 'mdi-tune-variant', label: 'nav.settings', match: ['SettingsAll', 'Settings'] },
+      ],
+    }
   },
   computed: {
     mobile() {
       return this.display.smAndDown.value
+    },
+    version() {
+      return import.meta.env.VITE_APP_VERSION || '2.1.0'
+    },
+    // Mappe le nom de route vers le chemin racine de la section pour l'onglet actif
+    activeTabPath() {
+      const map = {
+        Home: '/',
+        CredentialsAll: '/credentials',
+        Credentials: '/credentials',
+        OperationsAll: '/operations',
+        Operations: '/operations',
+        SettingsAll: '/settings',
+        Settings: '/settings',
+      }
+      return map[this.$route.name] ?? '/'
+    },
+    // N'affiche les breadcrumbs que sur les routes détail (avec :address)
+    showBreadcrumbs() {
+      return ['Settings', 'Credentials', 'Operations'].includes(this.$route.name)
     },
     startupStatus() {
       return this.$store.state.startupStatus
@@ -187,17 +300,12 @@ export default {
       return this.$store.state.gatewayStatus
     },
     gatewayHost() {
-      return this.$store.state.gatewayHost  // format 'host:port' (port = WebSocket BLE)
+      return this.$store.state.gatewayHost
     },
-    // Extrait uniquement l'IP/hostname depuis 'host:port' pour construire l'URL HTTPS.
-    // Le port de gatewayHost est celui du WebSocket BLE (8080), pas de l'interface web.
     gatewayWebUrl() {
       const ip = this.gatewayHost.split(':')[0]
       return ip ? `https://${ip}` : null
     },
-    // Always show the chip when a gateway is configured (status !== 'n/a').
-    // Connected = discreet success chip with the IP on hover; otherwise it
-    // surfaces in warning/error so the problem is visible at a glance.
     showGatewayChip() {
       return this.gatewayStatus !== 'n/a' && this.gatewayStatus !== ''
     },
@@ -247,25 +355,25 @@ export default {
     },
     breadcrumbs() {
       const crumbs = [
-        { title: this.$t('breadcrumb.home'), to: '/', disabled: this.$route.name === 'Home' },
+        { title: this.$t('breadcrumb.home'), to: '/', disabled: false },
       ]
       if (this.$route.name === 'Settings') {
         crumbs.push({ title: this.$t('breadcrumb.settings'), to: '/settings', disabled: false })
         crumbs.push({ title: this.activeLockName, disabled: true })
-      } else if (this.$route.name === 'SettingsAll') {
-        crumbs.push({ title: this.$t('breadcrumb.settings'), disabled: true })
       } else if (this.$route.name === 'Operations') {
         crumbs.push({ title: this.$t('breadcrumb.operations'), to: '/operations', disabled: false })
         crumbs.push({ title: this.activeLockName, disabled: true })
       } else if (this.$route.name === 'Credentials') {
         crumbs.push({ title: this.$t('breadcrumb.credentials'), to: '/credentials', disabled: false })
         crumbs.push({ title: this.activeLockName, disabled: true })
-      } else if (this.$route.name === 'CredentialsAll') {
-        crumbs.push({ title: this.$t('breadcrumb.credentials'), disabled: true })
-      } else if (this.$route.name === 'OperationsAll') {
-        crumbs.push({ title: this.$t('breadcrumb.operations'), disabled: true })
       }
       return crumbs
+    },
+  },
+  methods: {
+    isActive(item) {
+      if (item.match?.includes(this.$route.name)) return true
+      return this.$route.path === item.to
     },
   },
 }
