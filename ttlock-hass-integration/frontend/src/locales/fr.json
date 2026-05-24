@@ -17,7 +17,7 @@
       "unknown": "État de la passerelle indisponible",
       "restart": "Reconnecter la passerelle",
       "rebootEsp32": "Redémarrer la passerelle",
-      "openWeb": "Ouvrir l'interface web de la passerelle"
+      "openWeb": "Ouvrir la passerelle"
     }
   },
   "nav": {

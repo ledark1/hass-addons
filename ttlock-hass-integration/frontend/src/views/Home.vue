@@ -102,7 +102,7 @@
       </div>
 
       <v-row>
-        <v-col v-for="lock in locks" :key="lock.address" cols="12" sm="6" lg="4" xl="3">
+        <v-col v-for="lock in locks" :key="lock.address" cols="12" sm="6" md="4" lg="3" xl="3">
           <Lock :lock="lock" />
         </v-col>
       </v-row>

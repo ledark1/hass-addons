@@ -4,41 +4,10 @@
     flat
     density="default"
     border="b-thin"
-    height="64"
+    height="56"
   >
-    <!-- GAUCHE : hamburger mobile + logo + titre -->
+    <!-- GAUCHE : logo + titre -->
     <div class="d-flex align-center gap-2 px-3">
-      <!-- Hamburger mobile → menu dropdown -->
-      <v-menu
-        v-if="mobile"
-        v-model="mobileMenuOpen"
-        location="bottom start"
-        :close-on-content-click="true"
-      >
-        <template #activator="{ props: menuProps }">
-          <v-app-bar-nav-icon v-bind="menuProps" />
-        </template>
-        <v-list density="compact" min-width="200">
-          <v-list-item
-            v-for="item in navItems"
-            :key="item.to"
-            :prepend-icon="item.icon"
-            :title="$t(item.label)"
-            :active="isActive(item)"
-            color="primary"
-            rounded="lg"
-            @click="$router.push(item.to)"
-          />
-          <v-divider class="my-1" />
-          <v-list-item
-            :prepend-icon="isDark ? 'mdi-weather-sunny' : 'mdi-weather-night'"
-            :title="isDark ? $t('theme.light') : $t('theme.dark')"
-            rounded="lg"
-            @click="toggleTheme"
-          />
-        </v-list>
-      </v-menu>
-
       <!-- Logo avec tooltip version -->
       <v-tooltip :text="`TTLock v${version}`" location="bottom">
         <template #activator="{ props }">
@@ -48,28 +17,11 @@
         </template>
       </v-tooltip>
 
-      <!-- Titre app (non-mobile) -->
-      <span v-if="!mobile" class="text-body-1 font-weight-bold ml-1">TTLock</span>
+      <!-- Titre app -->
+      <span class="text-body-1 font-weight-bold ml-1">TTLock</span>
     </div>
 
-    <!-- CENTRE : onglets de navigation (non-mobile) -->
-    <v-tabs
-      v-if="!mobile"
-      :model-value="activeTabPath"
-      class="flex-grow-1"
-      align-tabs="center"
-      color="primary"
-    >
-      <v-tab
-        v-for="item in navItems"
-        :key="item.to"
-        :value="item.to"
-        :prepend-icon="item.icon"
-        @click="$router.push(item.to)"
-      >
-        {{ $t(item.label) }}
-      </v-tab>
-    </v-tabs>
+    <v-spacer />
 
     <!-- DROITE : boutons d'action -->
     <template #append>
@@ -153,8 +105,8 @@
           </v-list>
         </v-menu>
 
-        <!-- Toggle thème (non-mobile, mobile l'a dans le hamburger) -->
-        <v-tooltip v-if="!mobile" :text="$t('theme.toggle')" location="bottom">
+        <!-- Toggle thème -->
+        <v-tooltip :text="$t('theme.toggle')" location="bottom">
           <template #activator="{ props }">
             <v-btn
               v-bind="props"
@@ -237,47 +189,18 @@
 </template>
 
 <script>
-import { useDisplay } from 'vuetify'
 import { useTheme } from '@/composables/useTheme'
 
 export default {
   name: 'AppTopBar',
   emits: ['edit-config', 'start-scan', 'refresh-credentials'],
   setup() {
-    const display = useDisplay()
     const { isDark, toggleTheme } = useTheme()
-    return { display, isDark, toggleTheme }
-  },
-  data() {
-    return {
-      mobileMenuOpen: false,
-      navItems: [
-        { to: '/', icon: 'mdi-view-dashboard-outline', label: 'nav.dashboard', match: ['Home'] },
-        { to: '/credentials', icon: 'mdi-key-chain-variant', label: 'nav.credentials', match: ['CredentialsAll', 'Credentials'] },
-        { to: '/operations', icon: 'mdi-history', label: 'nav.operations', match: ['OperationsAll', 'Operations'] },
-        { to: '/settings', icon: 'mdi-tune-variant', label: 'nav.settings', match: ['SettingsAll', 'Settings'] },
-      ],
-    }
+    return { isDark, toggleTheme }
   },
   computed: {
-    mobile() {
-      return this.display.smAndDown.value
-    },
     version() {
       return import.meta.env.VITE_APP_VERSION || '2.1.0'
-    },
-    // Mappe le nom de route vers le chemin racine de la section pour l'onglet actif
-    activeTabPath() {
-      const map = {
-        Home: '/',
-        CredentialsAll: '/credentials',
-        Credentials: '/credentials',
-        OperationsAll: '/operations',
-        Operations: '/operations',
-        SettingsAll: '/settings',
-        Settings: '/settings',
-      }
-      return map[this.$route.name] ?? '/'
     },
     // N'affiche les breadcrumbs que sur les routes détail (avec :address)
     showBreadcrumbs() {
@@ -368,12 +291,6 @@ export default {
         crumbs.push({ title: this.activeLockName, disabled: true })
       }
       return crumbs
-    },
-  },
-  methods: {
-    isActive(item) {
-      if (item.match?.includes(this.$route.name)) return true
-      return this.$route.path === item.to
     },
   },
 }

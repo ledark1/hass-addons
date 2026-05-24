@@ -20,7 +20,7 @@
     <!-- Center: lock state -->
     <div class="lock-visual flex-grow-1 d-flex flex-column align-center justify-center px-4 py-4">
       <div class="lock-icon-wrap mb-3" :class="`bg-${stateColor}-tonal`">
-        <v-icon :icon="stateIcon" :color="stateColor" size="44" />
+        <v-icon :icon="stateIcon" :color="stateColor" size="36" />
       </div>
       <div class="d-flex align-center ga-2 flex-wrap justify-center">
         <v-chip
@@ -60,7 +60,7 @@
     <div class="d-flex align-center pa-3 ga-2">
       <v-btn
         v-if="canUnlock"
-        block size="default" variant="flat" color="primary"
+        size="default" variant="flat" color="primary"
         prepend-icon="mdi-lock-open-variant"
         :loading="waiting" :disabled="waiting"
         class="flex-grow-1"
@@ -69,7 +69,7 @@
 
       <v-btn
         v-else-if="canLock"
-        block size="default" variant="tonal" color="primary"
+        size="default" variant="tonal" color="primary"
         prepend-icon="mdi-lock"
         :loading="waiting" :disabled="waiting"
         class="flex-grow-1"
@@ -78,7 +78,7 @@
 
       <v-btn
         v-else-if="canPair"
-        block size="default" variant="flat" color="primary"
+        size="default" variant="flat" color="primary"
         prepend-icon="mdi-bluetooth-connect"
         :loading="busy" :disabled="busy"
         class="flex-grow-1"
@@ -87,7 +87,7 @@
 
       <v-btn
         v-else
-        block size="default" variant="tonal" color="secondary"
+        size="default" variant="tonal" color="secondary"
         prepend-icon="mdi-lock-question"
         disabled
         class="flex-grow-1"
@@ -98,14 +98,23 @@
           <v-btn v-bind="props" icon="mdi-dots-horizontal" variant="text" size="small" />
         </template>
         <v-list density="comfortable">
-          <v-list-item prepend-icon="mdi-key-chain" @click="credentials">
-            <v-list-item-title>{{ $t('lock.credentials') }}</v-list-item-title>
+          <v-list-item @click="navigate('Credentials')">
+            <template #prepend>
+              <v-icon color="warning" size="18" class="mr-3">mdi-key-chain</v-icon>
+            </template>
+            <v-list-item-title class="text-caption">{{ $t('lock.credentials') }}</v-list-item-title>
           </v-list-item>
-          <v-list-item prepend-icon="mdi-cog-outline" @click="settings">
-            <v-list-item-title>{{ $t('lock.settings') }}</v-list-item-title>
+          <v-list-item @click="navigate('Settings')">
+            <template #prepend>
+              <v-icon color="info" size="18" class="mr-3">mdi-cog-outline</v-icon>
+            </template>
+            <v-list-item-title class="text-caption">{{ $t('lock.settings') }}</v-list-item-title>
           </v-list-item>
-          <v-list-item prepend-icon="mdi-history" :disabled="waiting" @click="operations">
-            <v-list-item-title>{{ $t('lock.operationLog') }}</v-list-item-title>
+          <v-list-item :disabled="waiting" @click="navigate('Operations')">
+            <template #prepend>
+              <v-icon color="success" size="18" class="mr-3">mdi-history</v-icon>
+            </template>
+            <v-list-item-title class="text-caption">{{ $t('lock.operationLog') }}</v-list-item-title>
           </v-list-item>
         </v-list>
       </v-menu>
@@ -121,10 +130,10 @@ export default {
   },
   computed: {
     canLock() {
-      return this.lock.paired && this.lock.locked == 1
+      return this.lock.paired && this.lock.locked === 1
     },
     canUnlock() {
-      return this.lock.paired && this.lock.locked == 0
+      return this.lock.paired && this.lock.locked === 0
     },
     canPair() {
       return !this.lock.paired
@@ -214,14 +223,8 @@ export default {
         console.error(error)
       }
     },
-    credentials() {
-      this.$router.push({ name: "Credentials", params: { address: this.lock.address } })
-    },
-    settings() {
-      this.$router.push({ name: "Settings", params: { address: this.lock.address } })
-    },
-    operations() {
-      this.$router.push({ name: "Operations", params: { address: this.lock.address } })
+    navigate(name) {
+      this.$router.push({ name, params: { address: this.lock.address } })
     },
   },
   watch: {
@@ -246,9 +249,9 @@ export default {
   font-size: 0.72rem;
 }
 .lock-icon-wrap {
-  width: 88px;
-  height: 88px;
-  border-radius: 16px;
+  width: 72px;
+  height: 72px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
