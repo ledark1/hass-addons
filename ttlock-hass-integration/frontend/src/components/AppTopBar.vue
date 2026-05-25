@@ -23,48 +23,53 @@
 
     <v-spacer />
 
+    <!-- CENTRE : badges statut serrures -->
+    <div v-if="totalLocks > 0" class="badges-group d-flex align-center ga-3 px-3 py-1">
+
+      <!-- Total serrures -->
+      <v-tooltip :text="$t('dashboard.totalLocks')" location="bottom">
+        <template #activator="{ props }">
+          <div v-bind="props" class="d-flex align-center ga-1 text-caption badge-item">
+            <v-icon size="14" color="primary">mdi-lock-outline</v-icon>
+            <span class="font-weight-medium">{{ totalLocks }}</span>
+          </div>
+        </template>
+      </v-tooltip>
+
+      <v-divider vertical />
+
+      <!-- Connectées -->
+      <v-tooltip :text="`${connectedLocks}/${totalLocks} ${$t('dashboard.connected').toLowerCase()}`" location="bottom">
+        <template #activator="{ props }">
+          <div v-bind="props" class="d-flex align-center ga-1 text-caption badge-item">
+            <v-icon size="14" :color="connectedColor">mdi-bluetooth-connect</v-icon>
+            <span class="font-weight-medium" :class="`text-${connectedColor}`">
+              {{ connectedLocks }}/{{ totalLocks }}
+            </span>
+          </div>
+        </template>
+      </v-tooltip>
+
+      <!-- Batterie faible (uniquement si > 0) -->
+      <template v-if="lowBattery > 0">
+        <v-divider vertical />
+        <v-tooltip :text="`${lowBattery} ${$t('dashboard.lowBattery').toLowerCase()}`" location="bottom">
+          <template #activator="{ props }">
+            <div v-bind="props" class="d-flex align-center ga-1 text-caption badge-item">
+              <v-icon size="14" color="warning">mdi-battery-alert-variant-outline</v-icon>
+              <span class="font-weight-medium text-warning">{{ lowBattery }}</span>
+            </div>
+          </template>
+        </v-tooltip>
+      </template>
+    </div>
+
+    <v-spacer />
+
     <!-- DROITE : boutons d'action -->
     <template #append>
       <div class="d-flex align-center ga-1 pr-2">
 
-        <!-- ── Badges statut serrures (visibles dès qu'une serrure existe) ── -->
-        <template v-if="totalLocks > 0">
-
-          <!-- Total serrures -->
-          <v-tooltip :text="$t('dashboard.totalLocks')" location="bottom">
-            <template #activator="{ props }">
-              <div v-bind="props" class="d-flex align-center ga-1 px-1 text-caption status-badge">
-                <v-icon size="14" color="primary">mdi-lock-outline</v-icon>
-                <span class="font-weight-medium">{{ totalLocks }}</span>
-              </div>
-            </template>
-          </v-tooltip>
-
-          <!-- Connectées -->
-          <v-tooltip :text="`${connectedLocks}/${totalLocks} ${$t('dashboard.connected').toLowerCase()}`" location="bottom">
-            <template #activator="{ props }">
-              <div v-bind="props" class="d-flex align-center ga-1 px-1 text-caption status-badge">
-                <v-icon size="14" :color="connectedColor">mdi-bluetooth-connect</v-icon>
-                <span class="font-weight-medium" :class="`text-${connectedColor}`">
-                  {{ connectedLocks }}/{{ totalLocks }}
-                </span>
-              </div>
-            </template>
-          </v-tooltip>
-
-          <!-- Batterie faible (uniquement si > 0) -->
-          <v-tooltip v-if="lowBattery > 0" :text="`${lowBattery} ${$t('dashboard.lowBattery').toLowerCase()}`" location="bottom">
-            <template #activator="{ props }">
-              <div v-bind="props" class="d-flex align-center ga-1 px-1 text-caption status-badge">
-                <v-icon size="14" color="warning">mdi-battery-alert-variant-outline</v-icon>
-                <span class="font-weight-medium text-warning">{{ lowBattery }}</span>
-              </div>
-            </template>
-          </v-tooltip>
-
-          <!-- Séparateur vertical -->
-          <v-divider vertical class="mx-1" style="height: 20px; align-self: center;" />
-        </template>
         <!-- Indicateur de statut démarrage -->
         <v-tooltip v-if="startupStatus !== 0" :text="startupStatusTxt" location="bottom">
           <template #activator="{ props }">
@@ -314,13 +319,21 @@ export default {
   opacity: 0.75;
 }
 
-/* Badges statut serrures */
-.status-badge {
+/* Groupe de badges centré */
+.badges-group {
+  background: rgba(var(--v-theme-on-surface), 0.06);
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 10px;
+}
+
+/* Chaque badge individuel */
+.badge-item {
   cursor: default;
   border-radius: 6px;
+  padding: 2px 4px;
   transition: background-color 0.15s ease;
 }
-.status-badge:hover {
-  background-color: rgba(var(--v-theme-on-surface), 0.06);
+.badge-item:hover {
+  background-color: rgba(var(--v-theme-on-surface), 0.08);
 }
 </style>
