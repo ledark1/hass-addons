@@ -46,6 +46,8 @@
     "connected": "Connectées",
     "lowBattery": "Batterie faible",
     "lastAction": "Dernière activité",
+    "recentActivity": "Activité récente",
+    "viewAll": "Voir tout",
     "yourLocks": "Vos serrures",
     "yourLocksHint": "Accès rapide aux contrôles et aux identifiants",
     "empty": {

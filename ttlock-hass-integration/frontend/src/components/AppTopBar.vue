@@ -6,12 +6,12 @@
     border="b-thin"
     height="56"
   >
-    <!-- GAUCHE : logo + titre -->
-    <div class="d-flex align-center gap-2 px-3">
+    <!-- GAUCHE : logo + titre (cliquable → tableau de bord) -->
+    <router-link to="/" class="d-flex align-center gap-2 px-3 text-decoration-none home-link">
       <!-- Logo avec tooltip version -->
       <v-tooltip :text="`TTLock v${version}`" location="bottom">
         <template #activator="{ props }">
-          <v-avatar v-bind="props" size="32" color="primary" style="cursor: default; flex-shrink: 0;">
+          <v-avatar v-bind="props" size="32" color="primary" style="flex-shrink: 0;">
             <v-icon color="white" size="20">mdi-lock-smart</v-icon>
           </v-avatar>
         </template>
@@ -19,13 +19,52 @@
 
       <!-- Titre app -->
       <span class="text-body-1 font-weight-bold ml-1">TTLock</span>
-    </div>
+    </router-link>
 
     <v-spacer />
 
     <!-- DROITE : boutons d'action -->
     <template #append>
       <div class="d-flex align-center ga-1 pr-2">
+
+        <!-- ── Badges statut serrures (visibles dès qu'une serrure existe) ── -->
+        <template v-if="totalLocks > 0">
+
+          <!-- Total serrures -->
+          <v-tooltip :text="$t('dashboard.totalLocks')" location="bottom">
+            <template #activator="{ props }">
+              <div v-bind="props" class="d-flex align-center ga-1 px-1 text-caption status-badge">
+                <v-icon size="14" color="primary">mdi-lock-outline</v-icon>
+                <span class="font-weight-medium">{{ totalLocks }}</span>
+              </div>
+            </template>
+          </v-tooltip>
+
+          <!-- Connectées -->
+          <v-tooltip :text="`${connectedLocks}/${totalLocks} ${$t('dashboard.connected').toLowerCase()}`" location="bottom">
+            <template #activator="{ props }">
+              <div v-bind="props" class="d-flex align-center ga-1 px-1 text-caption status-badge">
+                <v-icon size="14" :color="connectedColor">mdi-bluetooth-connect</v-icon>
+                <span class="font-weight-medium" :class="`text-${connectedColor}`">
+                  {{ connectedLocks }}/{{ totalLocks }}
+                </span>
+              </div>
+            </template>
+          </v-tooltip>
+
+          <!-- Batterie faible (uniquement si > 0) -->
+          <v-tooltip v-if="lowBattery > 0" :text="`${lowBattery} ${$t('dashboard.lowBattery').toLowerCase()}`" location="bottom">
+            <template #activator="{ props }">
+              <div v-bind="props" class="d-flex align-center ga-1 px-1 text-caption status-badge">
+                <v-icon size="14" color="warning">mdi-battery-alert-variant-outline</v-icon>
+                <span class="font-weight-medium text-warning">{{ lowBattery }}</span>
+              </div>
+            </template>
+          </v-tooltip>
+
+          <!-- Séparateur vertical -->
+          <v-divider vertical class="mx-1" style="height: 20px; align-self: center;" />
+        </template>
         <!-- Indicateur de statut démarrage -->
         <v-tooltip v-if="startupStatus !== 0" :text="startupStatusTxt" location="bottom">
           <template #activator="{ props }">
@@ -163,28 +202,6 @@
       </div>
     </template>
 
-    <!-- EXTENSION : breadcrumbs sur les routes détail uniquement -->
-    <template v-if="showBreadcrumbs" #extension>
-      <v-breadcrumbs
-        :items="breadcrumbs"
-        density="compact"
-        class="pa-0 px-4 pb-1"
-      >
-        <template #divider>
-          <v-icon icon="mdi-chevron-right" size="16" class="text-medium-emphasis" />
-        </template>
-        <template #item="{ item }">
-          <v-breadcrumbs-item
-            :to="item.to"
-            :disabled="item.disabled"
-            class="text-body-2"
-            :class="item.disabled ? 'text-high-emphasis font-weight-medium' : 'text-medium-emphasis'"
-          >
-            {{ item.title }}
-          </v-breadcrumbs-item>
-        </template>
-      </v-breadcrumbs>
-    </template>
   </v-app-bar>
 </template>
 
@@ -201,10 +218,6 @@ export default {
   computed: {
     version() {
       return import.meta.env.VITE_APP_VERSION || '2.1.0'
-    },
-    // N'affiche les breadcrumbs que sur les routes détail (avec :address)
-    showBreadcrumbs() {
-      return ['Settings', 'Credentials', 'Operations'].includes(this.$route.name)
     },
     startupStatus() {
       return this.$store.state.startupStatus
@@ -258,6 +271,23 @@ export default {
     isScanning() {
       return this.$store.state.scanStatus == 1
     },
+    totalLocks() {
+      return this.$store.state.locks.length
+    },
+    connectedLocks() {
+      return this.$store.state.locks.filter(l => l.connected).length
+    },
+    lowBattery() {
+      return this.$store.state.locks.filter(
+        l => typeof l.battery === 'number' && l.battery > 0 && l.battery < 20
+      ).length
+    },
+    connectedColor() {
+      if (this.totalLocks === 0) return 'secondary'
+      if (this.connectedLocks === this.totalLocks) return 'success'
+      if (this.connectedLocks === 0) return 'error'
+      return 'warning'
+    },
     isCredentialsRoute() {
       return this.$route.name === 'Credentials'
     },
@@ -270,28 +300,27 @@ export default {
     isRebootingEsp32() {
       return this.$store.state.waitingEsp32Reboot
     },
-    activeLockName() {
-      const addr = this.$route.params.address
-      if (!addr) return null
-      const lock = this.$store.state.locks.find(l => l.address === addr)
-      return lock?.name || addr
-    },
-    breadcrumbs() {
-      const crumbs = [
-        { title: this.$t('breadcrumb.home'), to: '/', disabled: false },
-      ]
-      if (this.$route.name === 'Settings') {
-        crumbs.push({ title: this.$t('breadcrumb.settings'), to: '/settings', disabled: false })
-        crumbs.push({ title: this.activeLockName, disabled: true })
-      } else if (this.$route.name === 'Operations') {
-        crumbs.push({ title: this.$t('breadcrumb.operations'), to: '/operations', disabled: false })
-        crumbs.push({ title: this.activeLockName, disabled: true })
-      } else if (this.$route.name === 'Credentials') {
-        crumbs.push({ title: this.$t('breadcrumb.credentials'), to: '/credentials', disabled: false })
-        crumbs.push({ title: this.activeLockName, disabled: true })
-      }
-      return crumbs
-    },
   },
 }
 </script>
+
+<style scoped>
+/* Lien logo → accueil */
+.home-link {
+  color: inherit;
+  transition: opacity 0.15s ease;
+}
+.home-link:hover {
+  opacity: 0.75;
+}
+
+/* Badges statut serrures */
+.status-badge {
+  cursor: default;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+}
+.status-badge:hover {
+  background-color: rgba(var(--v-theme-on-surface), 0.06);
+}
+</style>

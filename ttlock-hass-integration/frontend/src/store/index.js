@@ -9,11 +9,7 @@ const store = createStore({
     ready: false,
     startupStatus: -1,
     scanStatus: 0,
-    // Health of the noble websocket gateway link (backend `gateway` field):
-    // 'n/a' (no gateway configured), 'connecting', 'connected',
-    // 'disconnected', 'unknown'.
     gatewayStatus: 'n/a',
-    // `host:port` of the configured noble gateway, '' in local BLE mode.
     gatewayHost: '',
     locks: [],
     passcodes: {},
@@ -67,17 +63,10 @@ const store = createStore({
       let updated = false;
       for (const lock of state.locks) {
         if (lock.address == updatedLock.address) {
-          // Merge over the previous entry instead of replacing it. The backend's
-          // Lock.fromTTLock may legitimately omit fields it cannot read at that moment
-          // (e.g. autoLockTime/audio while the lock is busy with a user op) — without
-          // this merge those fields would flicker to undefined and trigger UI re-renders
-          // (notably wiping `name` momentarily, which would hide whole views via v-if).
           const merged = { ...lock };
           for (const key of Object.keys(updatedLock)) {
             const value = updatedLock[key];
-            // Skip undefined so the backend can omit unreadable fields without wiping
-            // them in the store. Keep false/0/"" since those are legitimate states for
-            // boolean/numeric fields.
+
             if (value !== undefined) {
               merged[key] = value;
             }
@@ -200,9 +189,7 @@ const store = createStore({
     setWaitingOperations(state, isWaiting) {
       state.waitingOperations = isWaiting;
     },
-    // Reset every spinner flag at once. Called when the WebSocket drops so the UI
-    // doesn't stay stuck on a forever-spinning request whose reply lands in a closed
-    // socket and gets silently dropped server-side.
+
     clearWaitingFlags(state) {
       state.waiting = false;
       state.waitingCredentials = false;
@@ -215,9 +202,6 @@ const store = createStore({
       state.waitingSettings = false;
       state.waitingCalibrate = false;
       state.waitingGatewayRestart = false;
-      // waitingEsp32Reboot is NOT cleared here — the 60s safety timeout and
-      // setGatewayStatus('connected') handle cleanup. Clearing it here would
-      // lose the completion notice if the WS drops mid-reboot and reconnects.
     }
   },
   actions: {
@@ -253,10 +237,6 @@ const store = createStore({
       api.setAutoLock(lockAddress, time);
     },
     async readCredentials({ state, commit }, lockAddress) {
-      // Do NOT guard with state.waiting: the BLE mutex in manager.js serialises ops
-      // server-side. Blocking here when a lock/unlock is in progress causes the spinner
-      // to stay stuck forever because waitingCredentials is never set to true and the
-      // watcher in Credentials.vue never fires once state.waiting clears.
       if (state.waitingCredentials) return;
       commit('setWaitingCredentials');
       api.requestCredentials(lockAddress);

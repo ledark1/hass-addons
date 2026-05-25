@@ -46,6 +46,8 @@
     "connected": "Connected",
     "lowBattery": "Low battery",
     "lastAction": "Last activity",
+    "recentActivity": "Recent activity",
+    "viewAll": "View all",
     "yourLocks": "Your locks",
     "yourLocksHint": "Quick access to lock control and credentials",
     "empty": {

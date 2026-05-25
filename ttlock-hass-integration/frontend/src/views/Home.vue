@@ -1,79 +1,10 @@
 <template>
   <div>
-    <!-- Page header -->
-    <div class="d-flex flex-wrap align-end justify-space-between mb-6 ga-3">
-      <div>
-        <h1 class="text-h5 font-weight-bold mb-1">{{ $t('dashboard.title') }}</h1>
-        <div class="text-body-2 text-medium-emphasis">{{ $t('dashboard.subtitle') }}</div>
-      </div>
+
+    <div class="d-flex flex-wrap align-end justify-space-between mb-4 ga-3">
     </div>
 
-    <!-- KPI cards -->
-    <v-row class="mb-2">
-      <v-col cols="6" md="3">
-        <v-card class="kpi-card pa-4">
-          <div class="d-flex align-center justify-space-between mb-2">
-            <span class="text-caption text-medium-emphasis text-uppercase font-weight-medium">
-              {{ $t('dashboard.totalLocks') }}
-            </span>
-            <v-avatar size="32" color="primary" variant="tonal">
-              <v-icon size="18">mdi-lock-outline</v-icon>
-            </v-avatar>
-          </div>
-          <div class="text-h4 font-weight-bold">{{ totalLocks }}</div>
-        </v-card>
-      </v-col>
-
-      <v-col cols="6" md="3">
-        <v-card class="kpi-card pa-4">
-          <div class="d-flex align-center justify-space-between mb-2">
-            <span class="text-caption text-medium-emphasis text-uppercase font-weight-medium">
-              {{ $t('dashboard.connected') }}
-            </span>
-            <v-avatar size="32" color="success" variant="tonal">
-              <v-icon size="18">mdi-bluetooth-connect</v-icon>
-            </v-avatar>
-          </div>
-          <div class="text-h4 font-weight-bold">
-            {{ connectedLocks }}
-            <span class="text-body-2 text-medium-emphasis font-weight-regular">/ {{ totalLocks }}</span>
-          </div>
-        </v-card>
-      </v-col>
-
-      <v-col cols="6" md="3">
-        <v-card class="kpi-card pa-4">
-          <div class="d-flex align-center justify-space-between mb-2">
-            <span class="text-caption text-medium-emphasis text-uppercase font-weight-medium">
-              {{ $t('dashboard.lowBattery') }}
-            </span>
-            <v-avatar size="32" :color="lowBattery > 0 ? 'warning' : 'secondary'" variant="tonal">
-              <v-icon size="18">mdi-battery-alert-variant-outline</v-icon>
-            </v-avatar>
-          </div>
-          <div class="text-h4 font-weight-bold">{{ lowBattery }}</div>
-        </v-card>
-      </v-col>
-
-      <v-col cols="6" md="3">
-        <v-card class="kpi-card pa-4">
-          <div class="d-flex align-center justify-space-between mb-2">
-            <span class="text-caption text-medium-emphasis text-uppercase font-weight-medium">
-              {{ $t('dashboard.lastAction') }}
-            </span>
-            <v-avatar size="32" color="info" variant="tonal">
-              <v-icon size="18">mdi-clock-time-four-outline</v-icon>
-            </v-avatar>
-          </div>
-          <div class="text-h6 font-weight-bold text-truncate" :title="lastActionFull">
-            {{ lastActionShort }}
-          </div>
-        </v-card>
-      </v-col>
-    </v-row>
-
-    <!-- Empty state -->
-    <v-card v-if="totalLocks === 0" class="pa-8 text-center mt-4">
+    <v-card v-if="totalLocks === 0" class="pa-8 text-center">
       <v-avatar size="64" color="primary" variant="tonal" class="mb-4">
         <v-icon size="32">mdi-lock-plus-outline</v-icon>
       </v-avatar>
@@ -92,21 +23,70 @@
       </v-btn>
     </v-card>
 
-    <!-- Locks grid -->
-    <div v-else class="mt-6">
-      <div class="d-flex align-end justify-space-between mb-4">
-        <div>
-          <h2 class="text-subtitle-1 font-weight-bold">{{ $t('dashboard.yourLocks') }}</h2>
-          <div class="text-caption text-medium-emphasis">{{ $t('dashboard.yourLocksHint') }}</div>
-        </div>
-      </div>
+    <v-row v-else align="start">
 
-      <v-row>
-        <v-col v-for="lock in locks" :key="lock.address" cols="12" sm="6" md="4" lg="3" xl="3">
-          <Lock :lock="lock" />
-        </v-col>
-      </v-row>
-    </div>
+      <v-col cols="12" :order="2" :order-md="1" md="8" lg="9">
+        <div class="d-flex align-end justify-space-between mb-4">
+          <div>
+            <h2 class="text-subtitle-1 font-weight-bold">{{ $t('dashboard.yourLocks') }}</h2>
+            <div class="text-caption text-medium-emphasis">{{ $t('dashboard.yourLocksHint') }}</div>
+          </div>
+        </div>
+        <v-row>
+          <v-col v-for="lock in locks" :key="lock.address" cols="12" sm="6" lg="4">
+            <Lock :lock="lock" />
+          </v-col>
+        </v-row>
+      </v-col>
+
+      <v-col cols="12" :order="1" :order-md="2" md="4" lg="3">
+        <v-card class="pa-4">
+          <!-- En-tête + lien "Voir tout" -->
+          <div class="d-flex align-center justify-space-between mb-3">
+            <span class="text-caption text-medium-emphasis text-uppercase font-weight-medium">
+              {{ $t('dashboard.recentActivity') }}
+            </span>
+            <div class="d-flex align-center ga-1">
+              <v-avatar size="28" color="info" variant="tonal">
+                <v-icon size="16">mdi-clock-time-four-outline</v-icon>
+              </v-avatar>
+              <v-btn
+                variant="text"
+                size="x-small"
+                color="primary"
+                :to="{ name: 'OperationsAll' }"
+              >{{ $t('dashboard.viewAll') }}</v-btn>
+            </div>
+          </div>
+
+          <!-- Aucune opération -->
+          <div v-if="lastFiveActions.length === 0" class="text-body-2 text-medium-emphasis py-2">—</div>
+
+          <!-- 5 dernières opérations -->
+          <template v-for="(op, i) in lastFiveActions" :key="i">
+            <v-divider v-if="i > 0" class="my-2" />
+            <div class="d-flex align-center ga-2">
+              <v-icon
+                size="18"
+                :color="opColor(op)"
+                :icon="opIcon(op)"
+                class="flex-shrink-0"
+              />
+              <div class="min-w-0" style="flex: 1">
+                <div class="text-caption font-weight-medium text-truncate" :title="op.recordTypeName">
+                  {{ op.recordTypeName || '—' }}
+                </div>
+                <div class="text-caption text-medium-emphasis d-flex align-center justify-space-between ga-1">
+                  <span>{{ opDateTime(op) }}</span>
+                  <span v-if="op.lockName" class="text-truncate" style="max-width: 80px; opacity: 0.7">{{ op.lockName }}</span>
+                </div>
+              </div>
+            </div>
+          </template>
+        </v-card>
+      </v-col>
+
+    </v-row>
   </div>
 </template>
 
@@ -121,54 +101,72 @@ export default {
     locks() {
       return this.$store.state.locks
     },
+    pairedLocks() {
+      return this.$store.state.locks.filter(l => l.paired)
+    },
     isScanning() {
       return this.$store.state.scanStatus == 1
     },
     totalLocks() {
       return this.locks.length
     },
-    connectedLocks() {
-      return this.locks.filter(l => l.connected).length
-    },
-    lowBattery() {
-      return this.locks.filter(l => typeof l.battery === 'number' && l.battery > 0 && l.battery < 20).length
-    },
-    lastActionDate() {
+    lastFiveActions() {
       const all = []
       const ops = this.$store.state.operations
       for (const addr in ops) {
+        const lock = this.$store.state.locks.find(l => l.address === addr)
+        const lockName = lock?.name || addr
         for (const op of ops[addr] || []) {
-          if (op.operateDate) all.push(op.operateDate)
+          if (op.operateDate) all.push({ ...op, lockName })
         }
       }
-      if (all.length === 0) return null
-      return all.sort().reverse()[0]
+      return all
+        .sort((a, b) => {
+          if (a.operateDate > b.operateDate) return -1
+          if (a.operateDate < b.operateDate) return 1
+          if (a.recordNumber > b.recordNumber) return -1
+          if (a.recordNumber < b.recordNumber) return 1
+          return 0
+        })
+        .slice(0, 5)
     },
-    lastActionShort() {
-      if (!this.lastActionDate) return '—'
-      const m = moment(this.lastActionDate, "YYYYMMDDHHmmss")
-      return m.isValid() ? m.fromNow() : '—'
-    },
-    lastActionFull() {
-      if (!this.lastActionDate) return ''
-      const m = moment(this.lastActionDate, "YYYYMMDDHHmmss")
-      return m.isValid() ? m.format("DD-MM-YYYY HH:mm:ss") : ''
+  },
+  created() {
+    this.autoLoad(this.pairedLocks)
+  },
+  watch: {
+    pairedLocks(newVal) {
+      this.autoLoad(newVal)
     },
   },
   methods: {
+    autoLoad(locks) {
+      for (const lock of locks) {
+        if (!this.$store.state.operations[lock.address]) {
+          this.$store.dispatch("readOperations", lock.address)
+        }
+      }
+    },
     startScan() {
       this.$store.dispatch("scan")
+    },
+    opIcon(op) {
+      if (op.recordTypeCategory === 'LOCK') return 'mdi-lock'
+      if (op.recordTypeCategory === 'UNLOCK') return 'mdi-lock-open-variant'
+      if (op.recordTypeCategory === 'ALARM') return 'mdi-shield-lock-open'
+      return 'mdi-history'
+    },
+    opColor(op) {
+      if (op.recordTypeCategory === 'LOCK') return 'error'
+      if (op.recordTypeCategory === 'UNLOCK') return 'success'
+      if (op.recordTypeCategory === 'ALARM') return 'warning'
+      return 'secondary'
+    },
+    opDateTime(op) {
+      const m = moment(op.operateDate, "YYYYMMDDHHmmss")
+      return m.isValid() ? m.format("DD-MM-YYYY HH:mm") : '—'
     },
   },
 }
 </script>
 
-<style scoped>
-.kpi-card {
-  height: 100%;
-  transition: border-color 0.2s ease, transform 0.2s ease;
-}
-.kpi-card:hover {
-  border-color: rgb(var(--v-theme-primary));
-}
-</style>
