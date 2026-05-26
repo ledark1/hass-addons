@@ -1,6 +1,5 @@
 <template>
   <div>
-    <!-- Page header -->
     <div class="d-flex flex-wrap align-end justify-space-between mb-6 ga-3">
       <div>
         <h1 class="text-h5 font-weight-bold mb-1">{{ $t('settings.allTitle') }}</h1>
@@ -8,7 +7,6 @@
       </div>
     </div>
 
-    <!-- Empty state -->
     <v-card v-if="pairedLocks.length === 0" class="pa-8 text-center">
       <v-avatar size="64" color="primary" variant="tonal" class="mb-4">
         <v-icon size="32">mdi-tune-variant</v-icon>
@@ -20,7 +18,6 @@
     </v-card>
 
     <template v-else>
-      <!-- Lock selector -->
       <v-card class="pa-4 mb-4">
         <div class="d-flex align-center flex-wrap ga-3">
           <v-icon icon="mdi-lock-outline" class="text-medium-emphasis" />

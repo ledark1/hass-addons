@@ -41,7 +41,6 @@
 
       <v-col cols="12" :order="1" :order-md="2" md="4" lg="3">
         <v-card class="pa-4">
-          <!-- En-tête + lien "Voir tout" -->
           <div class="d-flex align-center justify-space-between mb-3">
             <span class="text-caption text-medium-emphasis text-uppercase font-weight-medium">
               {{ $t('dashboard.recentActivity') }}
@@ -59,10 +58,8 @@
             </div>
           </div>
 
-          <!-- Aucune opération -->
           <div v-if="lastFiveActions.length === 0" class="text-body-2 text-medium-emphasis py-2">—</div>
 
-          <!-- 5 dernières opérations -->
           <template v-for="(op, i) in lastFiveActions" :key="i">
             <v-divider v-if="i > 0" class="my-2" />
             <div class="d-flex align-center ga-2">

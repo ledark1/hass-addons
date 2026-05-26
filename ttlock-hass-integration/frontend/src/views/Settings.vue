@@ -1,6 +1,6 @@
 <template>
   <div v-if="lock.address">
-    <!-- Page header -->
+
     <div class="d-flex flex-wrap align-center justify-space-between mb-6 ga-3">
       <div class="d-flex align-center ga-3">
         <v-btn icon="mdi-arrow-left" variant="text" size="small" @click="cancel" />

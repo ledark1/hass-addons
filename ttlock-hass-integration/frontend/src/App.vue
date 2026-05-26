@@ -9,7 +9,6 @@
     <v-main class="bg-background">
       <div class="page-container">
 
-        <!-- Breadcrumbs (toutes les pages sauf accueil) -->
         <v-breadcrumbs
           v-if="showBreadcrumbs"
           :items="breadcrumbs"
@@ -69,27 +68,22 @@ export default {
       return lock?.name || addr
     },
     breadcrumbs() {
-      const crumbs = [
-        { title: this.$t('breadcrumb.home'), to: '/', disabled: false },
-      ]
       const name = this.$route.name
-      if (name === 'SettingsAll') {
-        crumbs.push({ title: this.$t('breadcrumb.settings'), disabled: true })
-      } else if (name === 'Settings') {
-        crumbs.push({ title: this.$t('breadcrumb.settings'), to: '/settings', disabled: false })
-        crumbs.push({ title: this.activeLockName, disabled: true })
-      } else if (name === 'OperationsAll') {
-        crumbs.push({ title: this.$t('breadcrumb.operations'), disabled: true })
-      } else if (name === 'Operations') {
-        crumbs.push({ title: this.$t('breadcrumb.operations'), to: '/operations', disabled: false })
-        crumbs.push({ title: this.activeLockName, disabled: true })
-      } else if (name === 'CredentialsAll') {
-        crumbs.push({ title: this.$t('breadcrumb.credentials'), disabled: true })
-      } else if (name === 'Credentials') {
-        crumbs.push({ title: this.$t('breadcrumb.credentials'), to: '/credentials', disabled: false })
-        crumbs.push({ title: this.activeLockName, disabled: true })
+      const extras = {
+        SettingsAll:    [{ title: this.$t('breadcrumb.settings'),    disabled: true }],
+        Settings:       [{ title: this.$t('breadcrumb.settings'),    to: '/settings',    disabled: false },
+                         { title: this.activeLockName,               disabled: true }],
+        OperationsAll:  [{ title: this.$t('breadcrumb.operations'),  disabled: true }],
+        Operations:     [{ title: this.$t('breadcrumb.operations'),  to: '/operations',  disabled: false },
+                         { title: this.activeLockName,               disabled: true }],
+        CredentialsAll: [{ title: this.$t('breadcrumb.credentials'), disabled: true }],
+        Credentials:    [{ title: this.$t('breadcrumb.credentials'), to: '/credentials', disabled: false },
+                         { title: this.activeLockName,               disabled: true }],
       }
-      return crumbs
+      return [
+        { title: this.$t('breadcrumb.home'), to: '/', disabled: false },
+        ...(extras[name] ?? []),
+      ]
     },
   },
   methods: {
