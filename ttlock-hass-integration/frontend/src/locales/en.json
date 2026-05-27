@@ -184,6 +184,16 @@
     "typeUnlock": "Unlock",
     "empty": "No operations to display"
   },
+  "aliases": {
+    "title": "Alias management",
+    "hint": "Export or import the alias file (names assigned to cards and fingerprints) to transfer your data between standalone mode and the Home Assistant addon.",
+    "export": "Export aliases",
+    "import": "Import aliases",
+    "importSuccess": "Aliases imported successfully",
+    "importErrorJson": "The selected file is not valid JSON.",
+    "importErrorFormat": "Invalid format: the file must contain the keys 'lock', 'card' and 'finger'.",
+    "importErrorServer": "Server error during import."
+  },
   "common": {
     "actions": "Actions",
     "add": "Add",

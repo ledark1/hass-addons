@@ -94,6 +94,28 @@ class Store {
   }
 
   /**
+   * Return the full aliasData object (used for export).
+   * @returns {{ lock: Object, card: Object, finger: Object }}
+   */
+  getAliasData() {
+    return this.aliasData;
+  }
+
+  /**
+   * Replace the entire aliasData with the provided object and persist.
+   * Unknown/extra keys are ignored; missing sections default to {}.
+   * @param {{ lock?: Object, card?: Object, finger?: Object }} data
+   */
+  importAliasData(data) {
+    this.aliasData = {
+      lock: (typeof data.lock === 'object' && data.lock !== null) ? data.lock : {},
+      card: (typeof data.card === 'object' && data.card !== null) ? data.card : {},
+      finger: (typeof data.finger === 'object' && data.finger !== null) ? data.finger : {}
+    };
+    this.saveData();
+  }
+
+  /**
    * Save the deviceInfo for a lock (persists firmware revision etc.)
    * @param {string} address Lock MAC address
    * @param {Object} deviceInfo deviceInfo object from TTLock.deviceInfo

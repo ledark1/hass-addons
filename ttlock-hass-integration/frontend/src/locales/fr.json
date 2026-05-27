@@ -184,6 +184,16 @@
     "typeUnlock": "Déverrouillage",
     "empty": "Aucune opération à afficher"
   },
+  "aliases": {
+    "title": "Gestion des alias",
+    "hint": "Exportez ou importez le fichier d'alias (noms attribués aux cartes et empreintes) pour transférer vos données entre le mode standalone et l'addon Home Assistant.",
+    "export": "Exporter les alias",
+    "import": "Importer les alias",
+    "importSuccess": "Alias importés avec succès",
+    "importErrorJson": "Le fichier sélectionné n'est pas un JSON valide.",
+    "importErrorFormat": "Format invalide : le fichier doit contenir les clés « lock », « card » et « finger ».",
+    "importErrorServer": "Erreur serveur lors de l'import."
+  },
   "common": {
     "actions": "Actions",
     "add": "Ajouter",

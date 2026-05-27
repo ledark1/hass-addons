@@ -113,6 +113,33 @@ export default async function init(options = {}) {
     }
   });
 
+  app.use(express.json({ limit: '1mb' }));
+
+  // ── Alias import / export ──────────────────────────────────────────────────
+  // Export: télécharge aliasData.json
+  app.get('/api/aliases', (req, res) => {
+    res.setHeader('Content-Disposition', 'attachment; filename="aliasData.json"');
+    res.json(store.getAliasData());
+  });
+
+  // Import: remplace aliasData par le JSON envoyé en body
+  app.post('/api/aliases', (req, res) => {
+    const data = req.body;
+    if (
+      !data ||
+      typeof data !== 'object' ||
+      Array.isArray(data) ||
+      typeof data.lock !== 'object' || Array.isArray(data.lock) ||
+      typeof data.card !== 'object' || Array.isArray(data.card) ||
+      typeof data.finger !== 'object' || Array.isArray(data.finger)
+    ) {
+      return res.status(400).json({ error: 'Format invalide : le fichier doit contenir les clés « lock », « card » et « finger » (objets).' });
+    }
+    store.importAliasData(data);
+    res.json({ ok: true });
+  });
+  // ──────────────────────────────────────────────────────────────────────────
+
   app.use('/frontend', express.static('frontend'));
 
   const server = app.listen(port, () => {
