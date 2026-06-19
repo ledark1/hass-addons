@@ -11,6 +11,7 @@
   "hassio_api": true,
   "host_network": true,
   "host_dbus": true,
+  "privileged": ["NET_ADMIN", "NET_RAW"],
   "auth_api": true,
   "ingress": true,
   "ingress_port": 55099,
