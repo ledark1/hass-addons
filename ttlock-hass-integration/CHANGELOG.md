@@ -1,150 +1,158 @@
 # Changelog
 
+## [2.5.0] - 2026-06-19
+
+### Cleaner BLE `macro_adminLogin` error messages
+
+- **`Manager.getOperationLog` catch**: when the SDK raises `No response to checkAdmin`, the stack trace is no longer double-logged — a single `console.warn` line is emitted instead: `getOperationLog [<address>]: BLE admin auth failed — lock out of range or busy`
+- **`_doAdminLogin` catch**: the message now includes the MAC address and translates `No response to checkAdmin` into a plain-language description: `[<address>] BLE admin login failed — lock out of range or busy (no response to checkAdmin)`
+- **`_processOperationLog` adminAuth guard**: message reformatted with address prefix and more explicit cause: `_processOperationLog [<address>]: adminAuth missing — BLE admin auth failed or disconnected during read`
+
 ## [1.9.23] - 2026-05-20
 
-### Icône anomalie de capteur dans le journal d'activité
+### Sensor anomaly icon in the activity log
 
-- **Catégorie ALARM** : `_enrichOperation()` dans `manager.js` mappe maintenant `LogOperateCategory.ALARM` (DOOR_SENSOR_ANOMALY, TAMPER_ALARM, LOW_BATTERY_ALARM…) vers `recordTypeCategory = 'ALARM'` au lieu de `'OTHER'`
-- **Icône `mdi-shield-lock-open`** : les entrées ALARM affichent l'icône en orange dans `OperationsAll.vue` et `Operations.vue`
+- **ALARM category**: `_enrichOperation()` in `manager.js` now maps `LogOperateCategory.ALARM` (DOOR_SENSOR_ANOMALY, TAMPER_ALARM, LOW_BATTERY_ALARM…) to `recordTypeCategory = 'ALARM'` instead of `'OTHER'`
+- **`mdi-shield-lock-open` icon**: ALARM entries display the icon in orange in `OperationsAll.vue` and `Operations.vue`
 
 ## [1.9.22] - 2026-05-20
 
-### AppTopBar : icône gateway unique avec menu déroulant
+### AppTopBar: single gateway icon with dropdown menu
 
-- **Refonte de la zone gateway** : le chip + 2 boutons séparés sont remplacés par une seule icône cliquable. Icône verte (`mdi-lan-connect`) si connecté, rouge (`mdi-lan-disconnect`) si déconnecté, orange (`mdi-help-network`) sinon. Spinner si une opération est en cours
-- **Menu déroulant** : un clic ouvre un `v-menu` avec deux actions — *Reconnecter le gateway* et *Redémarrer la passerelle ESP32* — désactivées pendant une opération en cours
-- **Tooltip au survol** : conserve le texte d'état (host si connecté, message d'erreur sinon)
+- **Gateway area redesign**: the chip + 2 separate buttons are replaced by a single clickable icon. Green (`mdi-lan-connect`) if connected, red (`mdi-lan-disconnect`) if disconnected, orange (`mdi-help-network`) otherwise. Spinner while an operation is in progress
+- **Dropdown menu**: a click opens a `v-menu` with two actions — *Reconnect gateway* and *Restart ESP32 gateway* — disabled while an operation is in progress
+- **Hover tooltip**: retains the status text (host if connected, error message otherwise)
 
 ## [1.9.21] - 2026-05-20
 
-### Fix : détection de fin de reboot ESP32 — reconnexion noble WS forcée
+### Fix: ESP32 reboot end detection — forced noble WS reconnection
 
-- **Cause racine** : le TCP du noble WebSocket (addon ↔ ESP32) reste "accroché" après le reboot car le protocole noble n'a pas de ping/pong applicatif. `_setGatewayStatus('disconnected')` ne se déclenchait jamais → `_esp32RebootPending` restait `true` → spinner 60s, aucune notification
-- **Reconnexion forcée** : `rebootEsp32()` — après un succès (ECONNRESET ou HTTP 200), programme `ws.reconnect()` après 2 s. Force le cycle `close → open` sur le noble WS → `_setGatewayStatus('disconnected')` puis `'connected'` → `_esp32RebootPending = false` → snackbar *Passerelle ESP32 redémarrée*
-- **Déduplication** : `rebootEsp32()` retourne immédiatement si `_esp32RebootPending` est déjà vrai (empêche un double-reboot si deux clients WS envoient la commande en même temps)
-- **`settle()` one-shot** : remplace les `resolve()/this._esp32RebootPending=true` en doublon. Empêche le cas où `req.destroy()` (timeout) émet lui-même ECONNRESET et poserait faussement `_esp32RebootPending = true`
-- **Fail-fast `_connectLock` corrigé** : le guard `_esp32RebootPending` attend maintenant que le flag redevienne `false` (plutôt que `_waitForGatewayReady` qui retournait `true` immédiatement si `gatewayStatus === 'connected'`)
+- **Root cause**: the noble WebSocket TCP (addon ↔ ESP32) stays "stuck" after reboot because the noble protocol has no application-level ping/pong. `_setGatewayStatus('disconnected')` never fired → `_esp32RebootPending` stayed `true` → 60s spinner, no notification
+- **Forced reconnection**: `rebootEsp32()` — after a success (ECONNRESET or HTTP 200), schedules `ws.reconnect()` after 2 s. Forces the `close → open` cycle on the noble WS → `_setGatewayStatus('disconnected')` then `'connected'` → `_esp32RebootPending = false` → snackbar *ESP32 gateway rebooted*
+- **Deduplication**: `rebootEsp32()` returns immediately if `_esp32RebootPending` is already true (prevents a double-reboot if two WS clients send the command simultaneously)
+- **One-shot `settle()`**: replaces the duplicate `resolve()/this._esp32RebootPending=true` calls. Prevents the case where `req.destroy()` (timeout) itself emits ECONNRESET and would incorrectly set `_esp32RebootPending = true`
+- **Fixed `_connectLock` fail-fast**: the `_esp32RebootPending` guard now waits for the flag to become `false` again (rather than `_waitForGatewayReady` which returned `true` immediately if `gatewayStatus === 'connected'`)
 
 ## [1.9.20] - 2026-05-20
 
-### Fail-fast BLE + résilience WS pendant le reboot ESP32
+### BLE fail-fast + WS resilience during ESP32 reboot
 
-- **Fail-fast `_connectLock` pendant le reboot** : `manager.js` — quand `_esp32RebootPending = true`, `_connectLock` appelle `_waitForGatewayReady(20000)` avant de tenter la connexion BLE. L'ESP32 met 10-15s à redémarrer ; pendant cette fenêtre le gateway est encore marqué `connected` mais les connexions BLE échouent. Le guard attend silencieusement le retour du gateway au lieu de logguer `newEvents: échec #1`
-- **`clearWaitingFlags` ne touche plus `waitingEsp32Reboot`** : `store/index.js` — si le WS frontend↔addon se coupe pendant le reboot (redémarrage HA, ingress), le flag reste actif. Le spinner persiste et la notice `Passerelle ESP32 redémarrée` s'affiche bien quand le gateway revient en ligne. Nettoyage assuré par `setGatewayStatus('connected')` (chemin normal) ou le timeout 60s de sécurité
+- **`_connectLock` fail-fast during reboot**: `manager.js` — when `_esp32RebootPending = true`, `_connectLock` calls `_waitForGatewayReady(20000)` before attempting BLE connection. The ESP32 takes 10-15s to restart; during this window the gateway is still marked `connected` but BLE connections fail. The guard silently waits for the gateway to come back instead of logging `newEvents: failure #1`
+- **`clearWaitingFlags` no longer touches `waitingEsp32Reboot`**: `store/index.js` — if the frontend↔addon WS drops during the reboot (HA restart, ingress), the flag stays active. The spinner persists and the *ESP32 gateway rebooted* notice shows correctly when the gateway comes back online. Cleanup is handled by `setGatewayStatus('connected')` (normal path) or the 60s safety timeout
 
 ## [1.9.19] - 2026-05-20
 
-### Notification de fin de reboot ESP32
+### ESP32 reboot completion notification
 
-- **Log backend** : quand la passerelle revient en ligne après un reboot ESP32, `_setGatewayStatus('connected')` détecte le flag `_esp32RebootPending` et affiche `[Gateway] ESP32 redémarré — passerelle de retour en ligne` (à la place du message d'état générique)
-- **Snackbar frontend** : la mutation `setGatewayStatus('connected')` pousse automatiquement la notice `notices.gateway.esp32RebootComplete` quand `waitingEsp32Reboot` était actif — `Notices.vue` affiche un snackbar vert *"Passerelle ESP32 redémarrée — connexion rétablie"* (fr) / *"ESP32 gateway rebooted — connection restored"* (en)
-- **Couches impactées** : `manager.js` (`_esp32RebootPending`, `rebootEsp32`, `_setGatewayStatus`), `store/index.js` (mutation `setGatewayStatus`), locales fr/en (`notices.gateway.esp32RebootComplete`)
+- **Backend log**: when the gateway comes back online after an ESP32 reboot, `_setGatewayStatus('connected')` detects the `_esp32RebootPending` flag and logs `[Gateway] ESP32 rebooted — gateway back online` (instead of the generic status message)
+- **Frontend snackbar**: the `setGatewayStatus('connected')` mutation automatically pushes the `notices.gateway.esp32RebootComplete` notice when `waitingEsp32Reboot` was active — `Notices.vue` displays a green snackbar *"Passerelle ESP32 redémarrée — connexion rétablie"* (fr) / *"ESP32 gateway rebooted — connection restored"* (en)
+- **Affected layers**: `manager.js` (`_esp32RebootPending`, `rebootEsp32`, `_setGatewayStatus`), `store/index.js` (`setGatewayStatus` mutation), locales fr/en (`notices.gateway.esp32RebootComplete`)
 
 ## [1.9.18] - 2026-05-20
 
-### Fix : spinner ESP32 reboot — rester actif jusqu'à la reconnexion complète
+### Fix: ESP32 reboot spinner — stay active until fully reconnected
 
-- **Spinner prolongé** : `_onEsp32Reboot` ne vide plus `waitingEsp32Reboot` sur succès HTTP. Le spinner reste actif jusqu'à ce que `gatewayStatus` redevienne `'connected'` (signal naturel de fin de reboot, ~10-15s). Timeout de sécurité à 60s si l'ESP32 ne revient pas
-- **Bouton reconnect désactivé** pendant le reboot ESP32 : `:disabled="isRebootingEsp32"` sur le bouton `mdi-lan-pending` empêche l'utilisateur de cliquer sur "reconnecter gateway" pendant que l'ESP32 reboot, évitant les `restartGateway` involontaires observés dans les logs
-- **`setGatewayStatus('connected')` efface `waitingEsp32Reboot`** dans la mutation Vuex : quand le WS se reconnecte après le reboot, le flag est automatiquement vidé
+- **Extended spinner**: `_onEsp32Reboot` no longer clears `waitingEsp32Reboot` on HTTP success. The spinner stays active until `gatewayStatus` becomes `'connected'` again (natural end-of-reboot signal, ~10-15s). 60s safety timeout if the ESP32 does not come back
+- **Reconnect button disabled** during ESP32 reboot: `:disabled="isRebootingEsp32"` on the `mdi-lan-pending` button prevents the user from clicking "reconnect gateway" while the ESP32 is rebooting, avoiding the unintended `restartGateway` calls observed in logs
+- **`setGatewayStatus('connected')` clears `waitingEsp32Reboot`** in the Vuex mutation: when the WS reconnects after the reboot, the flag is automatically cleared
 
 ## [1.9.17] - 2026-05-20
 
-### Bouton "Redémarrer la passerelle ESP32" dans AppTopBar
+### "Restart ESP32 gateway" button in AppTopBar
 
-- **Nouveau bouton `mdi-restart`** : quand un gateway noble est configuré, un bouton de redémarrage matériel apparaît à côté du bouton de reconnexion WS. Un clic envoie un `GET https://gateway_host:443/restart` avec Basic Auth (credentials de la config gateway). L'ESP32 répond 200 puis exécute `ESP.restart()` après 2 itérations de loop
-- **Certificat auto-signé** : la requête HTTPS utilise `rejectUnauthorized: false` (cert auto-généré côté ESP32, comportement standard)
-- **Spinner** : couvre uniquement la phase HTTP (1-5s) ; la puce gateway affiche ensuite le cycle `disconnected → connecting → connected` automatiquement via les mécanismes existants
-- **Retour d'erreur** : si l'ESP32 est inaccessible ou les credentials incorrects, un snackbar d'erreur est affiché
-- **Aucune modification côté ESP32** : l'endpoint `/restart` est déjà présent dans `web.cpp`
-- **Couches impactées** : `manager.rebootEsp32()` (import `node:https`), `WsApi.sendEsp32Reboot()`, `case 'rebootEsp32'` dans le dispatcher, `api.rebootEsp32()` + `_onEsp32Reboot()` (frontend), store (`waitingEsp32Reboot`), `AppTopBar.vue`, locales fr/en
+- **New `mdi-restart` button**: when a noble gateway is configured, a hardware restart button appears next to the WS reconnect button. A click sends a `GET https://gateway_host:443/restart` with Basic Auth (credentials from gateway config). The ESP32 responds 200 then executes `ESP.restart()` after 2 loop iterations
+- **Self-signed certificate**: the HTTPS request uses `rejectUnauthorized: false` (auto-generated cert on the ESP32 side, standard behaviour)
+- **Spinner**: covers only the HTTP phase (1-5s); the gateway chip then displays the `disconnected → connecting → connected` cycle automatically via existing mechanisms
+- **Error feedback**: if the ESP32 is unreachable or credentials are incorrect, an error snackbar is shown
+- **No ESP32-side changes**: the `/restart` endpoint is already present in `web.cpp`
+- **Affected layers**: `manager.rebootEsp32()` (import `node:https`), `WsApi.sendEsp32Reboot()`, `case 'rebootEsp32'` in the dispatcher, `api.rebootEsp32()` + `_onEsp32Reboot()` (frontend), store (`waitingEsp32Reboot`), `AppTopBar.vue`, locales fr/en
 
 ## [1.9.16] - 2026-05-20
 
-### Bouton "Reconnecter le gateway" dans AppTopBar
+### "Reconnect gateway" button in AppTopBar
 
-- **Nouveau bouton dans la barre** : quand un gateway noble est configuré, un bouton `mdi-lan-pending` apparaît à côté de la puce gateway. Un clic force une reconnexion WebSocket (via `ws.reconnect()` sur le socket RWS interne) sans redémarrer l'addon ni l'ESP32
-- **Indicateur de progression** : le bouton affiche un spinner pendant la reconnexion (jusqu'à 15 s) et se remet à jour automatiquement via le statut gateway existant
-- **Retour d'erreur** : si le gateway ne répond pas dans les 15 s, un snackbar d'erreur est affiché
-- **Couches impactées** : `manager.restartGateway()` (backend), `WsApi.sendGatewayRestart()`, `case 'restartGateway'` dans le dispatcher, `api.restartGateway()` + `_onGatewayRestart()` (frontend), store (`waitingGatewayRestart`), `AppTopBar.vue`, locales fr/en
+- **New button in the toolbar**: when a noble gateway is configured, an `mdi-lan-pending` button appears next to the gateway chip. A click forces a WebSocket reconnection (via `ws.reconnect()` on the internal RWS socket) without restarting the addon or the ESP32
+- **Progress indicator**: the button shows a spinner during reconnection (up to 15 s) and updates automatically via the existing gateway status
+- **Error feedback**: if the gateway does not respond within 15 s, an error snackbar is shown
+- **Affected layers**: `manager.restartGateway()` (backend), `WsApi.sendGatewayRestart()`, `case 'restartGateway'` in the dispatcher, `api.restartGateway()` + `_onGatewayRestart()` (frontend), store (`waitingGatewayRestart`), `AppTopBar.vue`, locales fr/en
 
 ## [1.9.15] - 2026-05-20
 
-### Amélioration des performances de connexion
+### Connection performance improvements
 
-- **ESP32 — délai post-déconnexion BLE réduit** : `ble_api.cpp` — `vTaskDelay` après déconnexion réduit de 1000 ms à 200 ms. Économise 800 ms à chaque cycle lock/unlock
-- **ESP32 — délai entre retries BLE réduit** : `ble_api.cpp` — délai entre tentatives de connexion BLE réduit de 1000 ms à 500 ms. Économise jusqu'à 2 s sur les connexions initiales qui nécessitent plusieurs essais
-- **Addon — reprise du monitor plus rapide** : `manager.js` — délai de `_scheduleGatewayRecovery` réduit de 2500 ms à 500 ms. Le monitor BLE redémarre 2 s plus tôt après un reconnect WebSocket
-- **Addon — reconnexion WebSocket plus rapide** : `manager.js` — configuration du `reconnecting-websocket` (RWS) du SDK avec `minReconnectionDelay: 300 ms` et `connectionTimeout: 2000 ms` (au lieu de 1000 ms et 4000 ms par défaut). La reconnexion après une coupure réseau est 700 ms plus rapide. Appliqué de façon défensive (feature-detected) dans `_attachGatewayWatchdog`
+- **ESP32 — reduced post-disconnect BLE delay**: `ble_api.cpp` — `vTaskDelay` after disconnect reduced from 1000 ms to 200 ms. Saves 800 ms per lock/unlock cycle
+- **ESP32 — reduced delay between BLE retries**: `ble_api.cpp` — delay between BLE connection attempts reduced from 1000 ms to 500 ms. Saves up to 2 s on initial connections that require multiple tries
+- **Addon — faster monitor resume**: `manager.js` — `_scheduleGatewayRecovery` delay reduced from 2500 ms to 500 ms. BLE monitor restarts 2 s earlier after a WebSocket reconnect
+- **Addon — faster WebSocket reconnection**: `manager.js` — SDK `reconnecting-websocket` (RWS) configured with `minReconnectionDelay: 300 ms` and `connectionTimeout: 2000 ms` (instead of defaults 1000 ms and 4000 ms). Reconnection after a network drop is 700 ms faster. Applied defensively (feature-detected) in `_attachGatewayWatchdog`
 
 ## [1.9.10] - 2026-05-15
 
-### Gateway noble : UI, reprise du monitor, fail-fast
+### Noble gateway: UI, monitor recovery, fail-fast
 
-- **Puce gateway toujours visible** : quand un gateway noble est configuré, la puce reste affichée en permanence — verte (`success`) avec `host:port` au survol quand le lien est connecté, en `warning`/`error` sinon (`AppTopBar.vue`). Le backend expose `gatewayHost` dans le payload `status` (`manager.getGatewayHost()`, `WsApi.js`) ; le frontend le stocke (`store`, `api`) et l'affiche dans l'infobulle (locales fr/en : `app.gateway.connected`)
-- **Reprise fiable du monitor BLE** : `_recoverMonitor` remplacé par `_ensureMonitoring()` + watchdog périodique (20 s). Corrige le `monitor BLE redémarré: false` : `TTLockClient.stopMonitor()` ne réinitialisait pas le flag interne `monitoring`, donc `startMonitor()` repartait toujours en `false` et le scan restait mort jusqu'à un scan manuel. Le nouveau code détecte cet état bloqué, réinitialise les flags internes du SDK (couplage documenté, feature-detected) et vérifie réellement `isMonitoring()` avec retries. Le watchdog couvre aussi les `startMonitor()` silencieusement faux de `_onScanStopped`/`_onLockDisconnected`
-- **Fail-fast des opérations BLE quand le gateway est déconnecté** : `_connectLock` attend brièvement la reconnexion (≤6 s) puis abandonne proprement au lieu d'enchaîner 4 tentatives × backoff vouées à `Disconnected while waiting for response` ; sortie anticipée de la boucle si le lien tombe en cours. Gardes scoppées au mode noble — aucun impact sur le BLE local
+- **Gateway chip always visible**: when a noble gateway is configured, the chip stays permanently displayed — green (`success`) with `host:port` on hover when the link is connected, `warning`/`error` otherwise (`AppTopBar.vue`). The backend exposes `gatewayHost` in the `status` payload (`manager.getGatewayHost()`, `WsApi.js`); the frontend stores it (`store`, `api`) and displays it in the tooltip (locales fr/en: `app.gateway.connected`)
+- **Reliable BLE monitor recovery**: `_recoverMonitor` replaced by `_ensureMonitoring()` + periodic watchdog (20 s). Fixes `monitor BLE redémarré: false`: `TTLockClient.stopMonitor()` did not reset the internal `monitoring` flag, so `startMonitor()` always returned `false` and the scan stayed dead until a manual scan. The new code detects this blocked state, resets the SDK's internal flags (documented coupling, feature-detected) and actually verifies `isMonitoring()` with retries. The watchdog also covers `startMonitor()` calls silently returning false from `_onScanStopped`/`_onLockDisconnected`
+- **BLE operation fail-fast when gateway is disconnected**: `_connectLock` briefly waits for reconnection (≤6 s) then cleanly aborts instead of chaining 4 attempts × backoff doomed to `Disconnected while waiting for response`; early exit from the loop if the link drops mid-operation. Guards scoped to noble mode — no impact on local BLE
 
 ## [1.9.9] - 2026-05-15
 
-### Améliorations gateway noble (WebSocket)
+### Noble gateway improvements (WebSocket)
 
-- **Robustesse des erreurs** : `index.js` remplace le handler `uncaughtException` basé sur un match de chaîne exact (fragile, message trompeur « retrying… » alors que l'addon ne retentait rien) par une détection ciblée de la classe d'erreurs de connexion récupérables (fragment de message OU code errno). Ajout d'un handler `unhandledRejection` symétrique. Avertissement throttlé (max 1/30 s) et message corrigé : c'est le `reconnecting-websocket` du SDK qui retente
-- **Validation de configuration** : `init.js` normalise et valide les options noble avant `setNobleGateway` — `gateway_port` est coercé en nombre (il arrivait en chaîne depuis l'environnement), `gateway_host`/`gateway_key`/`gateway_user`/`gateway_pass` sont contrôlés et toute valeur manquante ou invalide est signalée explicitement (le SDK retombait silencieusement sur des défauts codés en dur, dont `admin`/`admin`)
-- **État du lien dans l'UI** : `manager.js` observe le `reconnecting-websocket` du SDK (open/close/error) et expose `gatewayStatus` (`connecting`/`connected`/`disconnected`/`unknown`). Diffusé dans le payload `status` (`WsApi.js`, `api/index.js`) ; le frontend (`store`, `api`, `AppTopBar.vue`, locales fr/en) affiche une puce d'alerte quand le gateway n'est pas connecté. Détection 100 % défensive : dégradation en `unknown` si la structure interne du SDK change, jamais de crash
-- **Watchdog de reprise du monitoring** : sur reconnexion du gateway, `manager.js` relance le monitor BLE (`stopMonitor` puis `startMonitor`, avec une nouvelle tentative). Le SDK ne réémettait pas la commande de scan après une reconnexion silencieuse — le scan restait donc mort jusqu'au prochain redémarrage. Recovery débouncée et différée si une opération serrure est en cours
+- **Error robustness**: `index.js` replaces the `uncaughtException` handler based on exact string matching (fragile, misleading "retrying…" message when the addon was not actually retrying) with targeted detection of recoverable connection error classes (message fragment OR errno code). Added a symmetric `unhandledRejection` handler. Throttled warning (max 1/30 s) and corrected message: it is the SDK's `reconnecting-websocket` that retries
+- **Configuration validation**: `init.js` normalises and validates noble options before `setNobleGateway` — `gateway_port` is coerced to a number (it arrived as a string from the environment), `gateway_host`/`gateway_key`/`gateway_user`/`gateway_pass` are checked and any missing or invalid value is explicitly reported (the SDK silently fell back to hardcoded defaults, including `admin`/`admin`)
+- **Link status in the UI**: `manager.js` observes the SDK's `reconnecting-websocket` (open/close/error) and exposes `gatewayStatus` (`connecting`/`connected`/`disconnected`/`unknown`). Broadcast in the `status` payload (`WsApi.js`, `api/index.js`); the frontend (`store`, `api`, `AppTopBar.vue`, locales fr/en) displays a warning chip when the gateway is not connected. 100% defensive detection: degrades to `unknown` if the SDK's internal structure changes, never crashes
+- **Monitoring recovery watchdog**: on gateway reconnection, `manager.js` restarts the BLE monitor (`stopMonitor` then `startMonitor`, with one retry). The SDK did not re-emit the scan command after a silent reconnection — the scan therefore stayed dead until the next restart. Recovery is debounced and deferred if a lock operation is in progress
 
 ## [1.9.0] - 2026-05-12
 
-### Corrections
+### Fixes
 
-- **Connexion admin (adminLogin)** : réinitialisation systématique de `lock.adminAuth` avant chaque `_doAdminLogin`
-  - `manager.js` : le SDK positionnait `adminAuth=true` lors de `connect(false)/onConnected` même quand la session firmware n'était plus valide (déconnexion en pleine auth). Skipper `_doAdminLogin` sur une session périmée provoquait `NO_PERMISSION (0x01)` sur les lectures/écritures (notamment `getPassCodes`)
-  - `manager.js` : `adminAuth` également réinitialisé dans le `catch` pour ne pas court-circuiter la macro à la tentative suivante
-- **Ajout PIN** : refresh fiable de la liste après écriture
-  - `manager.js` : `addPasscode` attend désormais 1.5 s puis tente jusqu'à 3 fois la lecture `getPassCodes` (avec reconnexion si la serrure s'est déconnectée). Évite de renvoyer une liste vide à l'UI quand l'index firmware n'est pas encore prêt
-- **Persistance store** : sauvegardes JSON robustes face aux verrous Windows
-  - `store.js` : nouveau helper `fileDataRename` qui retente le `fs.rename` jusqu'à 3 fois en cas d'`EPERM` (antivirus / indexeur qui tient le `.tmp`). Appliqué à `lockData`, `aliasData` et `deviceInfoData`
-- **SDK TTLock** : bump `@domodom30/ttlock-sdk-js` `^0.6.0` → `^0.6.3`
-- **Frontend** : `CredentialsAll.vue` et `SettingsAll.vue` utilisent `Array.some()` (SonarQube) à la place de `Array.find()` pour la détection d'une serrure dépairée
-- **Frontend** : interface Réglages et Identifiants rafraîchies
-- **Dev mode** : `api/index.js` honore `process.env.DEV_MODE` pour `handleCredentials`/`handlePasscode`/`handleCard`/`handleFinger` (mock via `WsApi._devSendCredentials`)
+- **Admin connection (adminLogin)**: systematic reset of `lock.adminAuth` before each `_doAdminLogin`
+  - `manager.js`: the SDK set `adminAuth=true` during `connect(false)/onConnected` even when the firmware session was no longer valid (disconnection mid-auth). Skipping `_doAdminLogin` on a stale session caused `NO_PERMISSION (0x01)` on reads/writes (notably `getPassCodes`)
+  - `manager.js`: `adminAuth` also reset in the `catch` to avoid short-circuiting the macro on the next attempt
+- **Add PIN**: reliable list refresh after write
+  - `manager.js`: `addPasscode` now waits 1.5 s then retries `getPassCodes` up to 3 times (with reconnection if the lock disconnected). Avoids returning an empty list to the UI when the firmware index is not yet ready
+- **Store persistence**: robust JSON saves against Windows file locks
+  - `store.js`: new `fileDataRename` helper that retries `fs.rename` up to 3 times on `EPERM` (antivirus / indexer holding the `.tmp`). Applied to `lockData`, `aliasData` and `deviceInfoData`
+- **TTLock SDK**: bump `@domodom30/ttlock-sdk-js` `^0.6.0` → `^0.6.3`
+- **Frontend**: `CredentialsAll.vue` and `SettingsAll.vue` use `Array.some()` (SonarQube) instead of `Array.find()` for unpaired lock detection
+- **Frontend**: refreshed Settings and Credentials interfaces
+- **Dev mode**: `api/index.js` honours `process.env.DEV_MODE` for `handleCredentials`/`handlePasscode`/`handleCard`/`handleFinger` (mock via `WsApi._devSendCredentials`)
 
 ## [1.4.0] - 2026-04-27
 
-### Corrections
+### Fixes
 
-- **Firmware** : correction d'un bug récurrent où la version firmware de la serrure n'était pas affichée après un redémarrage
-  - `store.js` : ajout de `deviceInfoData` (méthodes `setDeviceInfo` / `getDeviceInfo`) persisté dans `/data/deviceInfoData.json`
-  - `manager.js` : sauvegarde de `lock.deviceInfo` dans le store immédiatement après le jumelage (`initLock`)
-  - `Lock.js` : fallback `store.getDeviceInfo()` quand `lock.deviceInfo` est absent (après redémarrage)
-  - `ha.js` : même fallback pour `sw_version` dans la découverte MQTT Home Assistant
+- **Firmware**: fixed a recurring bug where the lock firmware version was not displayed after a restart
+  - `store.js`: added `deviceInfoData` (`setDeviceInfo` / `getDeviceInfo` methods) persisted in `/data/deviceInfoData.json`
+  - `manager.js`: saves `lock.deviceInfo` to the store immediately after pairing (`initLock`)
+  - `Lock.js`: fallback to `store.getDeviceInfo()` when `lock.deviceInfo` is absent (after restart)
+  - `ha.js`: same fallback for `sw_version` in Home Assistant MQTT discovery
 
-- **Audio (son)** : le chip d'état du son restait grisé sur la carte serrure même quand le son était actif
-  - `Lock.js` : `getLockSound()` utilise un cache en mémoire et est sans danger quand la serrure est connectée ; la lecture était incorrectement conditionnée à `!isConnected()`, bloquant la valeur lors de l'événement `lockConnected`
+- **Audio (sound)**: the sound status chip stayed greyed out on the lock card even when sound was active
+  - `Lock.js`: `getLockSound()` uses an in-memory cache and is safe when the lock is connected; the read was incorrectly conditioned on `!isConnected()`, blocking the value during the `lockConnected` event
 
 ## [1.2.38] - 2026-04-26
 
-### Corrections
+### Fixes
 
-- **PIN (passcode)** : correction du crash `Cannot read properties of undefined (reading 'length')` lors de l'ajout ou la modification d'un code PIN
-  - `Passcode.vue` : utilisation de `||` au lieu de `??` pour gérer les chaînes vides (`passCode`, `newPassCode`, `startDate`)
-  - `Passcode.vue` : blocage de la sauvegarde si le nouveau code PIN est vide
-  - `api/index.js` : validation des paramètres requis avant appel au manager ; dates par défaut pour l'update si absentes
-  - `manager.js` : garde défensive dans `updatePasscode` pour détecter les paramètres manquants avant d'appeler le SDK
+- **PIN (passcode)**: fixed crash `Cannot read properties of undefined (reading 'length')` when adding or editing a PIN code
+  - `Passcode.vue`: use `||` instead of `??` to handle empty strings (`passCode`, `newPassCode`, `startDate`)
+  - `Passcode.vue`: block save if the new PIN is empty
+  - `api/index.js`: validate required parameters before calling the manager; default dates for update if absent
+  - `manager.js`: defensive guard in `updatePasscode` to detect missing parameters before calling the SDK
 
 ## [1.2.37] - 2026-04-26
 
-### Corrections et améliorations de fiabilité
+### Fixes and reliability improvements
 
-- **manager** : prévention des exécutions concurrentes de `_processOperationLog` par verrou (flag de déduplication + `finally`)
-- **manager** : `_onLockUpdated` ne tente plus de se connecter si `_processOperationLog` est déjà en cours
-- **manager** : émission de `lockBatteryUpdated` en plus de `lockUpdated` lors d'un changement de batterie
-- **ha.js** : abonnement à `lockUpdated` (au lieu de `lockBatteryUpdated` qui n'était jamais émis) — la batterie est maintenant correctement publiée via MQTT
-- **ha.js** : `updateLockState` enveloppé dans un `try/catch` pour éviter les crashs MQTT
-- **store.js** : sauvegardes atomiques via fichier temporaire + `rename()` — protège contre la corruption JSON en cas de coupure de courant
-- **WsApi.js** : méthode `_send()` centralisée avec `try/catch` — protège contre les envois sur socket fermée
-- **api/index.js** : les erreurs de `getAudio` sont maintenant renvoyées au client WebSocket
+- **manager**: prevent concurrent executions of `_processOperationLog` via lock (deduplication flag + `finally`)
+- **manager**: `_onLockUpdated` no longer attempts to connect if `_processOperationLog` is already running
+- **manager**: emit `lockBatteryUpdated` in addition to `lockUpdated` on battery change
+- **ha.js**: subscribe to `lockUpdated` (instead of `lockBatteryUpdated` which was never emitted) — battery is now correctly published via MQTT
+- **ha.js**: `updateLockState` wrapped in a `try/catch` to prevent MQTT crashes
+- **store.js**: atomic saves via temp file + `rename()` — protects against JSON corruption on power loss
+- **WsApi.js**: centralised `_send()` method with `try/catch` — protects against sends on a closed socket
+- **api/index.js**: `getAudio` errors are now forwarded to the WebSocket client
 
 ## [1.2.0] - 2026-04-22
 
