@@ -1337,7 +1337,12 @@ class Manager extends EventEmitter {
       console.log(`getOperationLog: ${operations.filter(Boolean).length} entries for ${address} in ${Date.now() - startedAt}ms`);
       return operations.filter(Boolean).map((op) => this._enrichOperation(op));
     } catch (error) {
-      console.error(`getOperationLog error:`, error);
+      if (error?.message?.includes('No response to checkAdmin')) {
+        // Le SDK a déjà loggé la stack trace via [ttlock:api] — on émet juste le contexte
+        console.warn(`getOperationLog [${address}]: authentification admin BLE échouée — serrure hors portée ou occupée`);
+      } else {
+        console.error(`getOperationLog [${address}] error:`, error.message);
+      }
       return false;
     } finally {
       this._releaseConnect(address);
@@ -1446,7 +1451,12 @@ class Manager extends EventEmitter {
     // reconnexion BLE (état transitoire du firmware). maxRetries=3 conservé pour absorber
     // les round-trips défaillants sans exploser en 36 tentatives.
     const adminOk = await lock.macro_adminLogin(3, 800).catch((e) => {
-      console.warn('macro_adminLogin failed:', e.message);
+      const noResponse = e.message?.includes('No response to checkAdmin');
+      console.warn(
+        `[${address}] Admin login BLE échoué — ${noResponse
+          ? 'serrure hors portée ou occupée (pas de réponse au checkAdmin)'
+          : e.message}`
+      );
       return false;
     });
     if (!adminOk && !lock.isConnected()) {
@@ -2177,7 +2187,7 @@ class Manager extends EventEmitter {
       // déconnexion pendant la lecture (→ données partielles/invalides). Dans les deux
       // cas : pas de vraie lecture BLE → ne pas resetter le circuit-breaker newEvents.
       if (!lock.adminAuth) {
-        console.warn('_processOperationLog: adminAuth absent après getOperationLog pour', lock.getAddress(), '— cache ou déconnexion');
+        console.warn(`_processOperationLog [${lock.getAddress()}]: adminAuth absent — authentification admin BLE échouée ou déconnexion pendant la lecture`);
         lock._lastOperationLogFetch = Date.now();
         return false;
       }
