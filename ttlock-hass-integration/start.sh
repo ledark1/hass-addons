@@ -33,19 +33,5 @@ if $(bashio::config.true "gateway_debug"); then
   export WEBSOCKET_DEBUG=1
 fi
 
-# --- Free the BLE adapter for noble (local adapter mode only) ---
-# noble needs the HCI device DOWN to grab the exclusive HCI_CHANNEL_USER. On
-# Home Assistant OS bluetoothd keeps hci0 UP/managed, so noble falls back to the
-# shared RAW channel: passive scan works but "LE Create Connection" gets clobbered
-# and every connect() times out. Powering the adapter off via BlueZ (host D-Bus)
-# releases it so noble can take exclusive control and bring it up itself.
-# Skipped in gateway mode (BLE runs on the remote ESP32, not the local adapter).
-if [ "${GATEWAY}" != "noble" ]; then
-  echo "Releasing local BLE adapter from BlueZ for noble exclusive access"
-  rfkill unblock bluetooth 2>/dev/null || true
-  bluetoothctl power off 2>/dev/null || true
-  sleep 2
-fi
-
 cd /app
 npm start
