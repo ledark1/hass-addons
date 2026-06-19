@@ -40,22 +40,5 @@ fi
 # it; noble then opens it on its OWN exclusive HCI user channel and brings it back
 # up itself — which requires the NET_ADMIN capability (see config.json privileged).
 # Skipped in gateway mode (BLE runs on the remote ESP32, not the local adapter).
-if [ "${GATEWAY}" != "noble" ]; then
-  echo "Releasing local BLE adapter from BlueZ for noble exclusive access"
-  rfkill unblock bluetooth 2>/dev/null || true
-  # Only power down when BlueZ actually has the adapter UP. On an add-on restart
-  # the previous noble session may have left it down/mid-transition; powering it
-  # off again then races bluetoothd re-powering it and leaves noble unable to
-  # acquire the exclusive HCI_CHANNEL_USER ("BLE adapter not ready"). Skip the
-  # toggle if it's already off, and give BlueZ time to fully settle if we do it.
-  if bluetoothctl show 2>/dev/null | grep -q "Powered: yes"; then
-    bluetoothctl power off 2>/dev/null || true
-    sleep 4
-  else
-    echo "Adapter already powered down — leaving it for noble"
-    sleep 1
-  fi
-fi
-
 cd /app
 npm start
