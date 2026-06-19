@@ -3,7 +3,7 @@
   "version": "2.5.0",
   "slug": "ttlock-hass-integration",
   "description": "Integration of the offline TTLock SDK into Home Assistant",
-  "url": "https://github.com/domodom30/hass-addons",
+  "url": "https://github.com/ledark1/hass-addons",
   "panel_icon": "mdi:key-wireless",
   "startup": "application",
   "boot": "auto",

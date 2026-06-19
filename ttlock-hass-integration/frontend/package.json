@@ -31,12 +31,12 @@
     "vite-plugin-vuetify": "^2.0.0"
   },
   "bugs": {
-    "url": "https://github.com/domodom30/hass-addons/issues"
+    "url": "https://github.com/ledark1/hass-addons/issues"
   },
-  "homepage": "https://github.com/domodom30/hass-addons/tree/master/ttlock-hass-integration",
+  "homepage": "https://github.com/ledark1/hass-addons/tree/master/ttlock-hass-integration",
   "license": "GPL-3.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/domodom30/ttlock-hass-integration.git"
+    "url": "git+https://github.com/ledark1/hass-addons.git"
   }
 }
