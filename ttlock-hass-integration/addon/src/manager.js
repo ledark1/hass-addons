@@ -500,9 +500,13 @@ class Manager extends EventEmitter {
   async initLock(address) {
     const lock = this.newLocks.get(address);
     if (lock === undefined) return false;
-    if (!(await this._connectLock(lock))) return false;
+    // needsAdmin=false: a new/unpaired lock has no admin credentials yet. Running
+    // macro_adminLogin (checkAdmin) before init fails with "No response to checkAdmin"
+    // / NO_PERMISSION and burns all connect attempts before initLock() ever runs.
+    // The SDK establishes admin credentials as part of initLock()'s own handshake.
+    if (!(await this._connectLock(lock, false))) return false;
     try {
-      const res = await lock.initLock();
+      const res = await withTimeout(lock.initLock(), 40000, 'initLock ' + address);
       if (res !== false) {
         this.pairedLocks.set(lock.getAddress(), lock);
         this.newLocks.delete(lock.getAddress());
