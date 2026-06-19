@@ -30,7 +30,7 @@
       <v-divider v-else />
 
       <v-card-actions class="px-4 py-3">
-        <v-btn variant="text" :disabled="busy" @click="cancelConfig">{{ $t('common.cancel') }}</v-btn>
+        <v-btn variant="text" :disabled="busy" @click="cancelConfig">{{ $t('common.close') }}</v-btn>
         <v-spacer />
         <v-btn
           variant="flat"
