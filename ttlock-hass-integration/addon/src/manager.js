@@ -2183,7 +2183,28 @@ class Manager extends EventEmitter {
       // autorisant le retour du cache oplog sans connexion admin réelle. On remet adminAuth
       // à false pour garantir que chaque appel à getOperationLog() ici effectue un vrai login.
       lock.adminAuth = false;
-      let operations = await lock.getOperationLog();
+      // Bound the read like the manual path (getOperationLog above): a record with a
+      // bad CRC makes the SDK's internal fetch loop re-read the same entries forever
+      // (the read pointer never advances), holding the BLE mutex indefinitely and
+      // starving every user op (unlock/lock) on _acquireMutex. Force-disconnect on
+      // timeout so the SDK loop exits via its `if(!isConnected) break` path and the
+      // mutex is released.
+      let timeoutHandle;
+      const operationsPromise = lock.getOperationLog();
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutHandle = setTimeout(async () => {
+          console.warn(`_processOperationLog [${lock.getAddress()}]: lecture oplog bloquée (CRC corrompu?) — déconnexion forcée`);
+          if (lock.isConnected()) await lock.disconnect().catch(() => {});
+          await sleep(1000);
+          reject(new Error('BLE timeout (_processOperationLog oplog read)'));
+        }, 30000);
+      });
+      let operations;
+      try {
+        operations = await Promise.race([operationsPromise, timeoutPromise]);
+      } finally {
+        clearTimeout(timeoutHandle);
+      }
       // Vérifier adminAuth APRÈS l'appel. Le SDK le positionne à true uniquement si
       // macro_adminLogin réussit (checkAdmin + checkRandom BLE) ET si la serrure ne
       // s'est pas encore déconnectée (onDisconnected remet adminAuth à false). Si
