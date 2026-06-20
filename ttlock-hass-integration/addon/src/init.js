@@ -3,6 +3,7 @@ import store from './store.js';
 import manager from './manager.js';
 import express from 'express';
 import api from '../api/index.js';
+import externalApi from '../api/external.js';
 
 /**
  * Validate and normalise the noble-gateway options.
@@ -101,6 +102,11 @@ export default async function init(options = {}) {
   // create express app
   const app = express();
   const port = options.port ?? 55099;
+
+  // External machine-to-machine REST API (yk-immo platform over WireGuard).
+  // Mounted BEFORE the HA-ingress IP filter so it is reachable from outside the
+  // HA proxy, but gated by a static API key (and disabled when none is set).
+  app.use('/api/ext', externalApi(options.externalApiKey || ''));
 
   // Because we use host networking we need to filter out
   // all requests except those coming from the HA proxy

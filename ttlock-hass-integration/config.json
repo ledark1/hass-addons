@@ -24,6 +24,7 @@
   },
   "schema": {
     "gateway": "match(^none|noble$)",
+    "external_api_key": "str?",
     "discovery_prefix": "str?",
     "gateway_host": "str?",
     "gateway_port": "port?",

@@ -66,5 +66,8 @@ init({
   gateway_pass: process.env.GATEWAY_PASS,
   // Cooldown en secondes entre deux lectures du journal opérationnel (option addon oplog_cooldown).
   // Manager.js lit process.env.OPLOG_COOLDOWN directement ; cette entrée documente le paramètre.
-  oplog_cooldown: parseInt(process.env.OPLOG_COOLDOWN, 10) || 10
+  oplog_cooldown: parseInt(process.env.OPLOG_COOLDOWN, 10) || 10,
+  // Clé API machine-à-machine pour l'API REST externe (/api/ext/*), appelée par
+  // la plateforme yk-immo via le tunnel WireGuard. Vide = API externe désactivée.
+  externalApiKey: process.env.EXTERNAL_API_KEY || ''
 });
