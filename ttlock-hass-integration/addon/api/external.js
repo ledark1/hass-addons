@@ -57,6 +57,30 @@ export default function externalApi(apiKey) {
     res.json({ passcodes: creds.passcodes });
   });
 
+  // Operation / activity log for a lock — record number, date, type, code used.
+  //
+  // Default: persisted log from lockData.json (instant, NO BLE). This already
+  // holds the full history the addon has ever pulled, so it survives the lock
+  // being out of range / the gateway being down.
+  //
+  // `?reload=1` forces a fresh BLE fetch first (slow, several seconds, requires
+  // the lock in range) to pull entries newer than the last sync, then returns
+  // the merged persisted log.
+  //
+  // Each entry: { recordNumber, operateDate ("YYYYMMDDHHmmss", lock-local),
+  // recordType, recordTypeName, recordTypeCategory (LOCK|UNLOCK|FAILED|ALARM|
+  // OTHER), password (PIN used, when applicable), electricQuantity (battery %) }.
+  router.get('/locks/:address/operations', async (req, res) => {
+    const address = req.params.address;
+    const reload = req.query.reload === '1' || req.query.reload === 'true';
+    if (reload) {
+      const ops = await manager.getOperationLog(address, true);
+      // false = BLE fetch failed; fall back to the persisted log rather than erroring.
+      if (Array.isArray(ops)) return res.json({ operations: ops, reloaded: true });
+    }
+    res.json({ operations: manager.getPersistedOperationLog(address), reloaded: false });
+  });
+
   // Add a passcode.
   router.post('/locks/:address/passcodes', async (req, res) => {
     const { passCode, startDate, endDate, type = 1 } = req.body || {};
