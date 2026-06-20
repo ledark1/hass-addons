@@ -97,6 +97,23 @@ export default function externalApi(apiKey) {
     res.json({ ok: true, passcodes: result === null ? null : result });
   });
 
+  // Update a passcode (change value and/or validity window). `type` must match
+  // the one used at creation. Keep `newPassCode` = `passCode` to change only the
+  // dates. BLE round-trip — may take several seconds.
+  router.patch('/locks/:address/passcodes', async (req, res) => {
+    const { passCode, newPassCode, startDate, endDate, type = 1 } = req.body || {};
+    const next = newPassCode ?? passCode;
+    if (!isDigits(passCode) || !isDigits(next)) {
+      return res.status(400).json({ error: 'passCode/newPassCode must be 4–9 digits' });
+    }
+    if (!isTTLockDate(startDate) || !isTTLockDate(endDate)) {
+      return res.status(400).json({ error: 'startDate/endDate must be YYYYMMDDHHmm (12 digits)' });
+    }
+    const result = await manager.updatePasscode(req.params.address, type, passCode, next, startDate, endDate);
+    if (result === false) return res.status(502).json({ error: 'Update passcode failed' });
+    res.json({ ok: true, passcodes: result === null ? null : result });
+  });
+
   // Delete a passcode (type must match the one used at creation).
   router.delete('/locks/:address/passcodes', async (req, res) => {
     const { passCode, type = 1 } = req.body || {};

@@ -61,6 +61,13 @@ class Manager extends EventEmitter {
     this.connectRetryTimers = new Map();
     /** @type {Map<string, Promise<void>>} Per-lock BLE mutex tail (serializes BLE access on a given address) */
     this._bleMutex = new Map();
+    /**
+     * @type {Promise<void>} Global BLE-radio serialization chain. A single BLE adapter can
+     * only hold one GATT connection at a time — per-address locking let connects to different
+     * locks run concurrently and collide (both `connect()` return false / time out). Every
+     * _acquireMutex caller now waits on this chain so exactly one lock holds the radio at once.
+     */
+    this._radioChain = Promise.resolve();
     /** @type {Map<string, () => void>} Active mutex release functions keyed by address — held between _connectLock and _releaseConnect */
     this._mutexReleases = new Map();
     /** @type {Map<string, boolean>} Last known audio (lockSound) status per lock — populated by successful BLE reads/writes */
@@ -1375,29 +1382,38 @@ class Manager extends EventEmitter {
   }
 
   /**
-   * Acquire the per-address BLE mutex. Returns a release function. Callers must
-   * always invoke the release function (typically via try/finally), even on error.
+   * Acquire the BLE radio. Serializes globally across ALL locks: a single BLE adapter can
+   * only sustain one GATT connection at a time, so connects to different addresses must not
+   * overlap (they collide and both fail). Returns a release function. Callers must always
+   * invoke it (typically via try/finally), even on error — a missed release stalls every
+   * lock, not just this one.
+   *
+   * The per-address `_bleMutex` entry is kept for the existing book-keeping/guards
+   * (`isLockBusy`, the `_bleMutex.size > 0` monitor-restart checks): with global
+   * serialization the map holds at most one entry, so `size > 0` still means "radio busy".
    * @param {string} address
    * @returns {Promise<() => void>}
    */
   async _acquireMutex(address) {
-    while (this._bleMutex.has(address)) {
-      try {
-        await this._bleMutex.get(address);
-      } catch (err) {
-        // The promise stored in _bleMutex was rejected (e.g. the holder threw).
-        // Swallow the rejection — we just need to re-check if the mutex is free.
-        console.debug('_acquireMutex: mutex promise rejected, retrying', err);
-      }
-    }
+    // Chain onto the global radio queue: capture the current tail, then append our turn so
+    // the next caller waits for us. Awaiting `prev` blocks until the previous holder releases.
+    const prev = this._radioChain;
+    let releaseRadio;
+    const myTurn = new Promise((r) => (releaseRadio = r));
+    this._radioChain = prev.then(() => myTurn);
+    await prev.catch(() => {}); // a rejected predecessor must not wedge the chain
     let release;
     const promise = new Promise((r) => (release = r));
     this._bleMutex.set(address, promise);
+    let released = false;
     return () => {
+      if (released) return; // idempotent: double release must not advance the chain twice
+      released = true;
       if (this._bleMutex.get(address) === promise) {
         this._bleMutex.delete(address);
       }
       release();
+      releaseRadio(); // hand the radio to the next waiter
     };
   }
 
