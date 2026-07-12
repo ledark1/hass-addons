@@ -13,6 +13,8 @@ export GATEWAY_KEY=$(bashio::config "gateway_key")
 export GATEWAY_USER=$(bashio::config "gateway_user")
 export GATEWAY_PASS=$(bashio::config "gateway_pass")
 export EXTERNAL_API_KEY=$(bashio::config "external_api_key")
+export DOOR_HOST=$(bashio::config "door_host")
+export DOOR_TOKEN=$(bashio::config "door_token")
 if $(bashio::config.true "ignore_crc"); then
   echo "IGNORE CRC TRUE"
   export TTLOCK_IGNORE_CRC=1

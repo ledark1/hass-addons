@@ -1,6 +1,7 @@
 import HomeAssistant from './ha.js';
 import store from './store.js';
 import manager from './manager.js';
+import door from './door.js';
 import express from 'express';
 import api from '../api/index.js';
 import externalApi from '../api/external.js';
@@ -82,6 +83,13 @@ export default async function init(options = {}) {
   if (options.gateway === 'noble') {
     const g = normaliseNobleOptions(options);
     manager.setNobleGateway(g.host, g.port, g.key, g.user, g.pass);
+  }
+
+  // Porte d'entrée ESP32 (optionnelle) : client HTTP + polling /status.
+  // Démarré avant HomeAssistant pour que ha.js voie door.isConfigured().
+  if (options.doorHost) {
+    door.configure({ host: options.doorHost, token: options.doorToken });
+    door.startPolling();
   }
   if (options.mqttHost) {
     const useSSL = options.mqttSSL === 'true';

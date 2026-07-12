@@ -69,5 +69,9 @@ init({
   oplog_cooldown: parseInt(process.env.OPLOG_COOLDOWN, 10) || 10,
   // Clé API machine-à-machine pour l'API REST externe (/api/ext/*), appelée par
   // la plateforme yk-immo via le tunnel WireGuard. Vide = API externe désactivée.
-  externalApiKey: process.env.EXTERNAL_API_KEY || ''
+  externalApiKey: process.env.EXTERNAL_API_KEY || '',
+  // Contrôleur de porte d'entrée ESP32 (Wiegand). Vide = désactivé.
+  // Préférer une IP fixe : le mDNS .local ne résout pas toujours en conteneur.
+  doorHost: process.env.DOOR_HOST || '',
+  doorToken: process.env.DOOR_TOKEN || ''
 });

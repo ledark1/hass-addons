@@ -1,6 +1,7 @@
 import mqtt from 'async-mqtt';
 import manager from './manager.js';
 import store from './store.js';
+import door from './door.js';
 import { LockedStatus } from '@domodom30/ttlock-sdk-js';
 import {
   BRIDGE_AVAILABILITY_TOPIC,
@@ -17,7 +18,12 @@ import {
   parseCommandTopic,
   latestOperation,
   latestUnlock,
-  buildLastOperationPayload
+  buildLastOperationPayload,
+  DOOR_ID,
+  doorStateTopic,
+  doorCommandTopic,
+  doorAvailabilityTopic,
+  isDoorCommandTopic
 } from './mqttTopics.js';
 
 class HomeAssistant {
@@ -62,6 +68,11 @@ class HomeAssistant {
     manager.on('lockUpdated', this._onLockBatteryUpdated.bind(this));
     manager.on('lockUnpaired', this._onLockUnpaired.bind(this));
     manager.on('lockStateUpdated', this._onLockStateUpdated.bind(this));
+
+    // Porte d'entrée ESP32 (si configurée) — alimentée par le polling de door.js
+    this._doorConfigured = false;
+    door.on('status', this._onDoorStatus.bind(this));
+    door.on('availability', this._onDoorAvailability.bind(this));
   }
 
   /** Schedule a single reconnection attempt (guarded against duplicates). */
@@ -321,6 +332,117 @@ class HomeAssistant {
   }
 
   /**
+   * Publish MQTT discovery for the ESP32 front-door controller: an "open"
+   * button, connectivity, and sensors fed by the /status poll. One fixed
+   * device (a single door per install) — see DOOR_ID in mqttTopics.js.
+   * @param {boolean} [force] republish even if already configured this session
+   */
+  async configureDoor(force = false) {
+    if (!this.connected || !door.isConfigured()) return;
+    if (!force && this._doorConfigured) return;
+
+    const device = {
+      identifiers: [DOOR_ID],
+      name: "Porte d'entrée",
+      manufacturer: 'DIY',
+      model: 'ESP32 Wiegand (T-AC04)'
+    };
+    const avail = {
+      availability: [
+        { topic: BRIDGE_AVAILABILITY_TOPIC, payload_available: PAYLOAD_ONLINE, payload_not_available: PAYLOAD_OFFLINE },
+        { topic: doorAvailabilityTopic(), payload_available: PAYLOAD_ONLINE, payload_not_available: PAYLOAD_OFFLINE }
+      ],
+      availability_mode: 'all'
+    };
+
+    const entities = [
+      {
+        component: 'button',
+        objectId: 'open',
+        payload: {
+          unique_id: DOOR_ID + '_open',
+          name: "Porte d'entrée Ouvrir",
+          device: device,
+          icon: 'mdi:door-open',
+          command_topic: doorCommandTopic(),
+          payload_press: 'OPEN',
+          qos: 1,
+          ...avail
+        }
+      },
+      {
+        component: 'sensor',
+        objectId: 'active_codes',
+        payload: {
+          unique_id: DOOR_ID + '_active_codes',
+          name: "Porte d'entrée Codes actifs",
+          device: device,
+          icon: 'mdi:form-textbox-password',
+          state_topic: doorStateTopic(),
+          value_template: '{{ value_json.active_codes }}',
+          ...avail
+        }
+      },
+      {
+        component: 'sensor',
+        objectId: 'rssi',
+        payload: {
+          unique_id: DOOR_ID + '_rssi',
+          name: "Porte d'entrée RSSI",
+          device: device,
+          unit_of_measurement: 'dB',
+          icon: 'mdi:signal',
+          state_topic: doorStateTopic(),
+          value_template: '{{ value_json.wifi_rssi }}',
+          ...avail
+        }
+      },
+      {
+        component: 'binary_sensor',
+        objectId: 'connectivity',
+        payload: {
+          unique_id: DOOR_ID + '_connectivity',
+          name: "Porte d'entrée Connectivity",
+          device: device,
+          device_class: 'connectivity',
+          state_topic: doorAvailabilityTopic(),
+          payload_on: PAYLOAD_ONLINE,
+          payload_off: PAYLOAD_OFFLINE,
+          // Bridge only : reste historisé même quand l'ESP32 est injoignable.
+          availability: [{ topic: BRIDGE_AVAILABILITY_TOPIC, payload_available: PAYLOAD_ONLINE, payload_not_available: PAYLOAD_OFFLINE }]
+        }
+      }
+    ];
+
+    for (const entity of entities) {
+      await this._publish(discoveryConfigTopic(this.discovery_prefix, entity.component, DOOR_ID, entity.objectId), entity.payload, { retain: true, qos: 1 });
+    }
+    this._doorConfigured = true;
+  }
+
+  /** @param {object} status payload du GET /status ESP32 */
+  async _onDoorStatus(status) {
+    if (!this.connected) return;
+    try {
+      await this.configureDoor();
+      await this._publish(doorStateTopic(), status, { retain: true, qos: 1 });
+    } catch (error) {
+      console.error('MQTT door status error:', error.message);
+    }
+  }
+
+  /** @param {boolean} online */
+  async _onDoorAvailability(online) {
+    if (!this.connected) return;
+    try {
+      await this.configureDoor();
+      await this._publish(doorAvailabilityTopic(), online ? PAYLOAD_ONLINE : PAYLOAD_OFFLINE, { retain: true, qos: 1 });
+    } catch (error) {
+      console.error('MQTT door availability error:', error.message);
+    }
+  }
+
+  /**
    * Publish a payload. Objects are JSON-encoded; strings are sent as-is
    * (availability / retained-message purges).
    * @param {string} topic
@@ -435,6 +557,19 @@ class HomeAssistant {
    */
   async _republishAll() {
     await this._publish(BRIDGE_AVAILABILITY_TOPIC, PAYLOAD_ONLINE, { retain: true, qos: 1 });
+    if (door.isConfigured()) {
+      try {
+        await this.configureDoor(true);
+        if (door.online !== null) {
+          await this._publish(doorAvailabilityTopic(), door.online ? PAYLOAD_ONLINE : PAYLOAD_OFFLINE, { retain: true, qos: 1 });
+        }
+        if (door.lastStatus) {
+          await this._publish(doorStateTopic(), door.lastStatus, { retain: true, qos: 1 });
+        }
+      } catch (error) {
+        console.error('MQTT door republish error:', error.message);
+      }
+    }
     for (const address of this.configuredLocks.keys()) {
       const lock = manager.pairedLocks?.get?.(address);
       if (!lock) continue;
@@ -557,6 +692,17 @@ class HomeAssistant {
      * Topic: ttlock/e1581b3a605e/set
        Message: UNLOCK
      */
+    // Porte ESP32 : 'ttlock/door/set' est couvert par la même souscription
+    // wildcard, mais 'door' n'est pas un id de serrure → traité avant parse.
+    if (isDoorCommandTopic(topic)) {
+      const command = message.toString('utf8');
+      if (command === 'OPEN') {
+        door.open()
+          .then(() => console.log('[Door] Ouverture à distance demandée via HA'))
+          .catch((error) => console.error('[Door] Échec ouverture :', error.message));
+      }
+      return;
+    }
     const parsed = parseCommandTopic(topic);
     if (parsed) {
       const command = message.toString('utf8');

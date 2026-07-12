@@ -11,12 +11,17 @@
   "hassio_api": true,
   "host_network": true,
   "host_dbus": true,
-  "privileged": ["NET_ADMIN", "NET_RAW"],
+  "privileged": [
+    "NET_ADMIN",
+    "NET_RAW"
+  ],
   "auth_api": true,
   "ingress": true,
   "ingress_port": 55099,
   "ingress_entry": "frontend/",
-  "services": ["mqtt:want"],
+  "services": [
+    "mqtt:want"
+  ],
   "options": {
     "gateway": "none",
     "ignore_crc": true,
@@ -25,6 +30,8 @@
   "schema": {
     "gateway": "match(^none|noble$)",
     "external_api_key": "str?",
+    "door_host": "str?",
+    "door_token": "str?",
     "discovery_prefix": "str?",
     "gateway_host": "str?",
     "gateway_port": "port?",
@@ -37,5 +44,11 @@
     "gateway_debug": "bool?",
     "oplog_cooldown": "int?"
   },
-  "arch": ["amd64", "armv7", "armhf", "i386", "aarch64"]
+  "arch": [
+    "amd64",
+    "armv7",
+    "armhf",
+    "i386",
+    "aarch64"
+  ]
 }

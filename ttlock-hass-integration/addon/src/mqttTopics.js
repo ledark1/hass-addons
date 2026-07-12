@@ -20,6 +20,33 @@ export const PAYLOAD_OFFLINE = 'offline';
 
 const LOCK_ID_RE = /^[0-9a-f]{12}$/i;
 
+// ── Porte d'entrée ESP32 (Wiegand) ──────────────────────────────────────────
+// Un seul contrôleur de porte par installation : topics fixes sous le même
+// DATA_PREFIX. Le segment 'door' ne peut pas entrer en collision avec un id de
+// serrure TTLock (toujours 12 caractères hexadécimaux).
+
+export const DOOR_ID = 'esp32_porte_entree';
+
+/** State topic JSON du /status ESP32 (active_codes, wifi_rssi, …). */
+export function doorStateTopic() {
+  return DATA_PREFIX + '/door/state';
+}
+
+/** Command topic sur lequel HA publie OPEN. Matché par commandSubscription(). */
+export function doorCommandTopic() {
+  return DATA_PREFIX + '/door/set';
+}
+
+/** Availability de la porte ('online' / 'offline'), pilotée par le polling. */
+export function doorAvailabilityTopic() {
+  return DATA_PREFIX + '/door/availability';
+}
+
+/** Vrai si le topic est le command topic de la porte. */
+export function isDoorCommandTopic(topic) {
+  return topic === doorCommandTopic();
+}
+
 /**
  * Build the lock id (MAC without colons, lowercase) used in every topic.
  * @param {string} address e.g. "E1:58:1B:3A:60:5E"

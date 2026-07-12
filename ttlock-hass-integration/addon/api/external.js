@@ -1,5 +1,6 @@
 import express from 'express';
 import manager from '../src/manager.js';
+import door from '../src/door.js';
 
 /** TTLock date strings are exactly 12 digits: YYYYMMDDHHmm */
 function isTTLockDate(d) {
@@ -9,6 +10,43 @@ function isTTLockDate(d) {
 /** Passcode must be digits only (4–9 per TTLock firmware). */
 function isDigits(v) {
   return typeof v === 'string' && /^\d{4,9}$/.test(v);
+}
+
+/** ESP32 door codes: 4–8 digits (MIN_CODE_LEN/MAX_CODE_LEN du firmware). */
+function isDoorCode(v) {
+  return typeof v === 'string' && /^\d{4,8}$/.test(v);
+}
+
+/**
+ * Convert a TTLock date string (YYYYMMDDHHmm, host-local wall clock) to Unix
+ * UTC seconds — the format the ESP32 stores (DS3231 kept in UTC). Same wall
+ * clock convention as the TTLock routes so the yk-immo platform sends one
+ * single format everywhere.
+ * @param {string} d
+ * @returns {number}
+ */
+function ttlockDateToUnix(d) {
+  return Math.floor(
+    new Date(
+      Number(d.slice(0, 4)),
+      Number(d.slice(4, 6)) - 1,
+      Number(d.slice(6, 8)),
+      Number(d.slice(8, 10)),
+      Number(d.slice(10, 12))
+    ).getTime() / 1000
+  );
+}
+
+/**
+ * Map an ESP32 client error to the outbound response: firmware 4xx (payload
+ * invalide, storage_full…) are forwarded as-is, anything else (timeout, refus
+ * de connexion) becomes a 502 like the TTLock BLE failures.
+ * @param {import('express').Response} res
+ * @param {any} error
+ */
+function sendDoorError(res, error) {
+  const status = Number.isInteger(error?.status) && error.status >= 400 && error.status < 500 ? error.status : 502;
+  res.status(status).json({ error: error?.reason || error?.message || 'ESP32 unreachable' });
 }
 
 /**
@@ -121,6 +159,76 @@ export default function externalApi(apiKey) {
     const result = await manager.deletePasscode(req.params.address, type, passCode);
     if (result === false) return res.status(502).json({ error: 'Delete passcode failed' });
     res.json({ ok: true, passcodes: result === null ? null : result });
+  });
+
+  // ── Porte d'entrée ESP32 (Wiegand) ────────────────────────────────────────
+  // Mêmes conventions que les routes TTLock : dates YYYYMMDDHHmm (heure locale
+  // de l'hôte), codes en chiffres. 503 si l'option door_host n'est pas
+  // configurée dans l'addon.
+
+  router.use('/door', (req, res, next) => {
+    if (!door.isConfigured()) {
+      return res.status(503).json({ error: 'Door controller not configured (door_host addon option)' });
+    }
+    next();
+  });
+
+  // Healthcheck / état (RTC, codes actifs, RSSI…).
+  router.get('/door/status', async (req, res) => {
+    try {
+      res.json(await door.getStatus());
+    } catch (error) {
+      sendDoorError(res, error);
+    }
+  });
+
+  // Journal des tentatives (boot, access_granted/denied, remote_open…).
+  router.get('/door/logs', async (req, res) => {
+    try {
+      res.json(await door.getLogs());
+    } catch (error) {
+      sendDoorError(res, error);
+    }
+  });
+
+  // Ouverture à distance (durée fixée par le firmware, RELAY_OPEN_MS).
+  router.post('/door/open', async (req, res) => {
+    try {
+      res.json({ ok: true, ...(await door.open()) });
+    } catch (error) {
+      sendDoorError(res, error);
+    }
+  });
+
+  // Provisionner un code clavier. Renvoyer le même code met à jour sa fenêtre.
+  router.post('/door/codes', async (req, res) => {
+    const { passCode, startDate, endDate, singleUse = false } = req.body || {};
+    if (!isDoorCode(passCode)) return res.status(400).json({ error: 'passCode must be 4–8 digits' });
+    if (!isTTLockDate(startDate) || !isTTLockDate(endDate)) {
+      return res.status(400).json({ error: 'startDate/endDate must be YYYYMMDDHHmm (12 digits)' });
+    }
+    try {
+      const result = await door.addCode({
+        code: passCode,
+        validFrom: ttlockDateToUnix(startDate),
+        validUntil: ttlockDateToUnix(endDate),
+        singleUse: singleUse === true
+      });
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      sendDoorError(res, error);
+    }
+  });
+
+  // Révoquer un code (le hash est dérivé du code, comme dans le firmware).
+  router.delete('/door/codes', async (req, res) => {
+    const { passCode } = req.body || {};
+    if (!isDoorCode(passCode)) return res.status(400).json({ error: 'passCode must be 4–8 digits' });
+    try {
+      res.json({ ok: true, ...(await door.deleteCode(passCode)) });
+    } catch (error) {
+      sendDoorError(res, error);
+    }
   });
 
   return router;
