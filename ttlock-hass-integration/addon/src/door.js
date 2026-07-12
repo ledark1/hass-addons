@@ -51,6 +51,10 @@ class Esp32Door extends EventEmitter {
     }
     if (this.host && !this.token) {
       console.warn('[Door] door_host configuré sans door_token — les requêtes seront refusées (401) par l\'ESP32.');
+    } else if (this.host) {
+      // Trace de démarrage : permet de vérifier depuis le log de l'add-on que
+      // le token est bien arrivé (longueur seulement, jamais la valeur).
+      console.log(`[Door] configuré : host=${this.host}, token présent (${this.token.length} caractères)`);
     }
   }
 

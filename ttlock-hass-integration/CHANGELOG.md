@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.5.1] - 2026-07-12
+
+### Porte d'entrée ESP32 — rebuild forcé + trace de démarrage
+
+- **Version bump** : garantit que l'image installée embarque tout le support
+  porte d'entrée (`door.js`, routes `/api/ext/door/*`, export `DOOR_HOST`/
+  `DOOR_TOKEN` dans `start.sh`) — une image construite pendant le développement
+  pouvait avoir les routes sans le câblage du token (→ 401 systématiques).
+- **`[Door] configuré : host=…, token présent (n caractères)`** au démarrage
+  pour diagnostiquer un token manquant/tronqué sans exposer sa valeur.
+
 ## [2.5.0] - 2026-06-19
 
 ### Cleaner BLE `macro_adminLogin` error messages
